@@ -9,4 +9,4 @@
 - [Направление разработки](docs/DEVELOPMENT.md)
 - [Методология экспериментов](docs/EXPERIMENTS.md)
 - [Правила работы с Git](docs/GIT_WORKFLOW.md)
-- [Исследовательская матрица](docs/RESEARCH_MATRIX.md.md)
+- [Исследовательская матрица](docs/RESEARCH_MATRIX.md)
