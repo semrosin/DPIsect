@@ -81,7 +81,8 @@ config.yaml
   `sender`.
 - `testdata/` — размеченные fixtures с известными причинами.
 - `experiments/<experiment_id>/` — в git: `config.yaml`, `plan.yaml`,
-  `run.json`, `report.md`.
+  `run.json`, `report.md`; при включённом preflight — также
+  `dns_log.yaml`.
 - `artifacts/` — сырые PCAP и логи (вне git; `SAFETY.md` §5).
 
 ## 6. Зависимости

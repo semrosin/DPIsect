@@ -29,15 +29,18 @@ var ErrNotImplemented = errors.New("run not implemented yet (stage 1, docs/DEVEL
 // experiments/<experiment_id>/config.yaml. The schema is mirrored by
 // docs/config.example.yaml; report front-matter — docs/EXPERIMENTS.md §4.
 type Config struct {
-	QuestionID   string       `yaml:"question_id"`
-	ExperimentID string       `yaml:"experiment_id"`
-	Mode         string       `yaml:"mode"`
-	Endpoint     Endpoint     `yaml:"endpoint"`
-	Budget       Budget       `yaml:"budget"`
-	Schedule     Schedule     `yaml:"schedule"`
-	Capture      CapturePaths `yaml:"capture"`
-	HelperLog    string       `yaml:"helper_log"`
-	RunnerLog    string       `yaml:"runner_log"`
+	QuestionID   string `yaml:"question_id"`
+	ExperimentID string `yaml:"experiment_id"`
+	Mode         string `yaml:"mode"`
+	// SNI is the host name put into the ClientHello of a
+	// valid-session run; raw plans carry their own bytes.
+	SNI       string       `yaml:"sni"`
+	Endpoint  Endpoint     `yaml:"endpoint"`
+	Budget    Budget       `yaml:"budget"`
+	Schedule  Schedule     `yaml:"schedule"`
+	Capture   CapturePaths `yaml:"capture"`
+	HelperLog string       `yaml:"helper_log"`
+	RunnerLog string       `yaml:"runner_log"`
 	// ClassificationRule must be fixed before the first packet is
 	// sent (docs/EXPERIMENTS.md §2); the verdict is set by the
 	// operator/agent, not by the analyzer (docs/EXPERIMENTS.md §7).
@@ -180,6 +183,10 @@ func (c Config) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf(
 			"endpoint.role %q must be lab, helper or target", c.Endpoint.Role))
+	}
+	if modeErr == nil && mode == generator.ValidSession && c.SNI == "" {
+		errs = append(errs, errors.New(
+			"sni is required for a valid-session run (ClientHello)"))
 	}
 	if modeErr == nil && mode == generator.RawExperiment && c.Endpoint.Role == RoleTarget {
 		errs = append(errs, errors.New(

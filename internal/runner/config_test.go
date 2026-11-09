@@ -12,6 +12,7 @@ import (
 const validConfig = `question_id: B01
 experiment_id: b01-test-2026-11
 mode: valid-session
+sni: example.test
 endpoint:
   role: helper
   ip: 192.0.2.10
@@ -101,6 +102,13 @@ func TestLoadRejectsInvalidConfigs(t *testing.T) {
 					"experiment_id: test-2026-11", 1)
 			},
 			wantErr: "must start with",
+		},
+		{
+			name: "valid session without sni",
+			mutate: func(s string) string {
+				return strings.Replace(s, "sni: example.test\n", "", 1)
+			},
+			wantErr: "sni is required",
 		},
 		{
 			name: "missing repetitions",

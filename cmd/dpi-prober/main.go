@@ -37,6 +37,8 @@ func run(args []string) error {
 		"explicit confirmation for a raw-experiment run (docs/SAFETY.md §1)")
 	operator := fs.String("operator", "",
 		"operator name recorded in run.json (H07)")
+	captureIface := fs.String("capture-iface", "",
+		"interface for the client PCAP (requires CAP_NET_RAW; empty: no capture)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -62,9 +64,11 @@ func run(args []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	return runner.Run(ctx, cfg, runner.Options{
-		AllowRaw:    *allowRaw,
-		Operator:    *operator,
-		ToolVersion: version,
-		ToolCommit:  commit,
+		AllowRaw:     *allowRaw,
+		Operator:     *operator,
+		ToolVersion:  version,
+		ToolCommit:   commit,
+		ConfigPath:   *configPath,
+		CaptureIface: *captureIface,
 	})
 }

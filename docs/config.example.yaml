@@ -6,6 +6,7 @@
 question_id: B01
 experiment_id: b01-sni-padding-2026-11
 mode: valid-session # valid-session | raw-experiment
+sni: example.com # ClientHello SNI (required for valid-session)
 
 endpoint:
   role: helper # lab | helper | target (raw is forbidden for target)
