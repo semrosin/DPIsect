@@ -39,8 +39,11 @@ type Config struct {
 	HelperLog    string       `yaml:"helper_log"`
 	RunnerLog    string       `yaml:"runner_log"`
 	// ClassificationRule must be fixed before the first packet is
-	// sent (docs/EXPERIMENTS.md §2); empty config is rejected.
-	ClassificationRule string `yaml:"classification_rule"`
+	// sent (docs/EXPERIMENTS.md §2); the verdict is set by the
+	// operator/agent, not by the analyzer (docs/EXPERIMENTS.md §7).
+	ClassificationRule string    `yaml:"classification_rule"`
+	Preflight          Preflight `yaml:"preflight"`
+	Lab                Lab       `yaml:"lab"`
 }
 
 // Endpoint is the single destination of the run.
@@ -73,6 +76,29 @@ type Schedule struct {
 type CapturePaths struct {
 	Client string `yaml:"client"`
 	Server string `yaml:"server"`
+}
+
+// Preflight configures availability checks before the series
+// (G01, G02; docs/ARCHITECTURE.md §1).
+type Preflight struct {
+	Enabled bool `yaml:"enabled"`
+	// Host is the name resolved by both sources (G01).
+	Host string `yaml:"host"`
+	// IndependentResolver is the second source, e.g. "8.8.8.8:53".
+	IndependentResolver string `yaml:"independent_resolver"`
+}
+
+// Lab selects the impairment profile for lab runs
+// (docs/ARCHITECTURE.md §1); ConfigID is recorded as lab_config_id
+// for reproducibility (H07).
+type Lab struct {
+	Enabled        bool    `yaml:"enabled"`
+	ConfigID       string  `yaml:"config_id"`
+	LossPercent    float64 `yaml:"loss_percent"`
+	ReorderPercent float64 `yaml:"reorder_percent"`
+	DelayMS        int     `yaml:"delay_ms"`
+	// MTU is zero when the link MTU is left unchanged.
+	MTU int `yaml:"mtu"`
 }
 
 // DefaultBudget returns the starting limits of docs/SAFETY.md §3.
@@ -195,6 +221,38 @@ func (c Config) Validate() error {
 	if c.ClassificationRule == "" {
 		errs = append(errs, errors.New(
 			"classification_rule must be fixed before the first packet (docs/EXPERIMENTS.md §2)"))
+	}
+
+	if c.Preflight.Enabled {
+		if c.Preflight.Host == "" {
+			errs = append(errs, errors.New(
+				"preflight.host is required when preflight.enabled (G01)"))
+		}
+		if c.Preflight.IndependentResolver == "" {
+			errs = append(errs, errors.New(
+				"preflight.independent_resolver is required when preflight.enabled (G01)"))
+		}
+	}
+
+	if c.Lab.Enabled && c.Lab.ConfigID == "" {
+		errs = append(errs, errors.New(
+			"lab.config_id is required when lab.enabled (H07)"))
+	}
+	if c.Lab.LossPercent < 0 || c.Lab.LossPercent > 100 {
+		errs = append(errs, fmt.Errorf(
+			"lab.loss_percent %v out of range 0-100", c.Lab.LossPercent))
+	}
+	if c.Lab.ReorderPercent < 0 || c.Lab.ReorderPercent > 100 {
+		errs = append(errs, fmt.Errorf(
+			"lab.reorder_percent %v out of range 0-100", c.Lab.ReorderPercent))
+	}
+	if c.Lab.DelayMS < 0 {
+		errs = append(errs, fmt.Errorf(
+			"lab.delay_ms %d must not be negative", c.Lab.DelayMS))
+	}
+	if c.Lab.MTU < 0 {
+		errs = append(errs, fmt.Errorf(
+			"lab.mtu %d must not be negative", c.Lab.MTU))
 	}
 
 	if len(errs) > 0 {

@@ -25,6 +25,22 @@ schedule:
   inter_trial_gap_ms: 100
   state_reset: none # how state is cleared between repetitions
 
+# Preflight availability checks before the series (G01, G02).
+preflight:
+  enabled: false
+  host: "" # name resolved by both sources, e.g. blocked.example
+  independent_resolver: "" # second source, e.g. 8.8.8.8:53
+
+# Lab impairment profile (internal/lab); config_id is recorded in
+# run.json as lab_config_id (H07).
+lab:
+  enabled: false
+  config_id: ""
+  loss_percent: 0.0
+  reorder_percent: 0.0
+  delay_ms: 0
+  mtu: 0 # 0 = leave link MTU unchanged
+
 capture: # outside git, see docs/SAFETY.md §5
   client: artifacts/b01-sni-padding-2026-11/client.pcap
   server: artifacts/b01-sni-padding-2026-11/server.pcap

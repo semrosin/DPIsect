@@ -35,6 +35,8 @@ func run(args []string) error {
 	configPath := fs.String("config", "", "path to experiment config.yaml")
 	allowRaw := fs.Bool("allow-raw", false,
 		"explicit confirmation for a raw-experiment run (docs/SAFETY.md §1)")
+	operator := fs.String("operator", "",
+		"operator name recorded in run.json (H07)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -59,5 +61,10 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	return runner.Run(ctx, cfg, runner.Options{AllowRaw: *allowRaw})
+	return runner.Run(ctx, cfg, runner.Options{
+		AllowRaw:    *allowRaw,
+		Operator:    *operator,
+		ToolVersion: version,
+		ToolCommit:  commit,
+	})
 }

@@ -125,6 +125,85 @@ func TestLoadRejectsInvalidConfigs(t *testing.T) {
 	}
 }
 
+func TestLoadPreflightAndLab(t *testing.T) {
+	t.Parallel()
+
+	content := validConfig + `preflight:
+  enabled: true
+  host: blocked.example
+  independent_resolver: 8.8.8.8:53
+lab:
+  enabled: true
+  config_id: netem-loss10-2026-11
+  loss_percent: 10.0
+  delay_ms: 5
+`
+	cfg, err := Load(writeConfig(t, content))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Preflight.Enabled || cfg.Preflight.Host != "blocked.example" ||
+		cfg.Preflight.IndependentResolver != "8.8.8.8:53" {
+		t.Errorf("preflight = %+v, want enabled with host and resolver", cfg.Preflight)
+	}
+	if !cfg.Lab.Enabled || cfg.Lab.ConfigID != "netem-loss10-2026-11" ||
+		cfg.Lab.LossPercent != 10.0 || cfg.Lab.DelayMS != 5 {
+		t.Errorf("lab = %+v, want enabled with config_id", cfg.Lab)
+	}
+}
+
+func TestLoadRejectsInvalidPreflightAndLab(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mutate  func(string) string
+		wantErr string
+	}{
+		{
+			name: "preflight enabled without host",
+			mutate: func(s string) string {
+				return s + "preflight:\n  enabled: true\n  independent_resolver: 8.8.8.8:53\n"
+			},
+			wantErr: "preflight.host",
+		},
+		{
+			name: "preflight enabled without resolver",
+			mutate: func(s string) string {
+				return s + "preflight:\n  enabled: true\n  host: blocked.example\n"
+			},
+			wantErr: "preflight.independent_resolver",
+		},
+		{
+			name: "lab enabled without config id",
+			mutate: func(s string) string {
+				return s + "lab:\n  enabled: true\n  loss_percent: 10.0\n"
+			},
+			wantErr: "lab.config_id",
+		},
+		{
+			name: "lab loss out of range",
+			mutate: func(s string) string {
+				return s + "lab:\n  enabled: false\n  config_id: x\n  loss_percent: 150.0\n"
+			},
+			wantErr: "loss_percent",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := Load(writeConfig(t, tt.mutate(validConfig)))
+			if err == nil {
+				t.Fatal("Load: want error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error %q does not contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestDefaultBudgetMatchesSafetyLimits(t *testing.T) {
 	t.Parallel()
 

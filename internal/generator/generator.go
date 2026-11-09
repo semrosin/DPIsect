@@ -50,15 +50,19 @@ func ParseMode(s string) (Mode, error) {
 // indexes into Payload; both are required for a full plan, an empty
 // slice means "not applicable".
 type PlannedWirePacket struct {
-	Payload       []byte
-	SplitOffsets  []int
-	TLSRecordEnds []int
-	TTL           uint8
-	Seq           uint32
-	Ack           uint32
+	Payload       []byte `yaml:"payload"`
+	SplitOffsets  []int  `yaml:"split_offsets"`
+	TLSRecordEnds []int  `yaml:"tls_record_ends"`
+	TTL           uint8  `yaml:"ttl"`
+	Seq           uint32 `yaml:"seq"`
+	Ack           uint32 `yaml:"ack"`
 	// Checksum is the TCP checksum to send; zero means "compute the
 	// correct one". CorruptChecksum forces an intentionally wrong
 	// checksum (question D04) and takes precedence.
-	Checksum        uint16
-	CorruptChecksum bool
+	Checksum        uint16 `yaml:"checksum"`
+	CorruptChecksum bool   `yaml:"corrupt_checksum"`
+	// SendAfterMS is the delay before this packet relative to the
+	// previous one in the plan; it is the explicit pacing parameter
+	// required by docs/GO_STYLE.md §3. Zero means "no extra delay".
+	SendAfterMS int64 `yaml:"send_after_ms"`
 }
