@@ -21,7 +21,11 @@ func TestNetemControllerOnLoopback(t *testing.T) {
 
 	ctx := context.Background()
 	c := New("lo", nil)
+	applied := false
 	t.Cleanup(func() {
+		if !applied {
+			return // the test skipped before touching the stand
+		}
 		if err := c.Reset(context.Background()); err != nil {
 			t.Errorf("cleanup Reset: %v", err)
 		}
@@ -44,6 +48,7 @@ func TestNetemControllerOnLoopback(t *testing.T) {
 		}
 		t.Fatalf("Apply: %v", err)
 	}
+	applied = true
 	out, err := ExecCommander{}.Run(ctx, "tc", "qdisc", "show", "dev", "lo")
 	if err != nil {
 		t.Fatalf("tc show: %v", err)
