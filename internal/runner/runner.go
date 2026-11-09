@@ -55,6 +55,9 @@ type sendSession interface {
 type dependencies struct {
 	checkPreflight func(ctx context.Context, cfg Config) (dnsprobe.Report, error)
 	newSender      func(addr string) sendSession
+	// settle is how long a connection stays open after its last
+	// packet so the helper can answer before the socket closes.
+	settle time.Duration
 }
 
 func defaultDependencies() dependencies {
@@ -64,6 +67,7 @@ func defaultDependencies() dependencies {
 				ctx, cfg.Preflight.Host, cfg.Endpoint.IP, cfg.Endpoint.Port)
 		},
 		newSender: func(addr string) sendSession { return sender.NewOS(addr) },
+		settle:    settleAfterSend,
 	}
 }
 
@@ -182,6 +186,12 @@ func run(ctx context.Context, cfg Config, opts Options, deps dependencies) error
 			_ = sess.Close()
 			return err
 		}
+		// Keep the connection open while the helper answers: an
+		// immediate close turns the response flight into EPIPE.
+		if err := sleepCtx(ctx, deps.settle); err != nil {
+			_ = sess.Close()
+			return fmt.Errorf("settle: %w", err)
+		}
 		if err := sess.Close(); err != nil {
 			return fmt.Errorf("close sender: %w", err)
 		}
@@ -191,12 +201,6 @@ func run(ctx context.Context, cfg Config, opts Options, deps dependencies) error
 				return fmt.Errorf("inter-trial gap: %w", err)
 			}
 		}
-	}
-
-	// Give the helper and the capture writer time to observe the
-	// response before teardown.
-	if err := sleepCtx(ctx, settleAfterSend); err != nil {
-		return fmt.Errorf("settle: %w", err)
 	}
 
 	if live != nil {
@@ -239,8 +243,9 @@ func run(ctx context.Context, cfg Config, opts Options, deps dependencies) error
 	return WriteRun(expDir, rec)
 }
 
-// settleAfterSend lets the helper respond and the capture flush
-// before the artifacts are hashed.
+// settleAfterSend is the production delay between the last packet and
+// the connection close: it lets the helper and the capture writer
+// observe the response before teardown.
 const settleAfterSend = 500 * time.Millisecond
 
 // sendPlan walks plan.Packets once, enforcing packet/byte budgets

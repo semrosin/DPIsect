@@ -204,8 +204,9 @@ func TestRunDeliversPlanOverTCP(t *testing.T) {
 
 // hookSender records sends for assertions without a real socket.
 type hookSender struct {
-	onSend func(generator.PlannedWirePacket) error
-	sent   int
+	onSend  func(generator.PlannedWirePacket) error
+	onClose func()
+	sent    int
 }
 
 func (h *hookSender) Send(_ context.Context, p generator.PlannedWirePacket) error {
@@ -218,7 +219,45 @@ func (h *hookSender) Send(_ context.Context, p generator.PlannedWirePacket) erro
 	return nil
 }
 
-func (h *hookSender) Close() error { return nil }
+func (h *hookSender) Close() error {
+	if h.onClose != nil {
+		h.onClose()
+	}
+	return nil
+}
+
+func TestRunHoldsConnectionDuringSettle(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writeRunConfig(t, dir, runConfigYAML("192.0.2.10", 8443, 1, 100, dir))
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	var sentAt, closedAt time.Time
+	sess := &hookSender{
+		onSend: func(generator.PlannedWirePacket) error {
+			sentAt = time.Now()
+			return nil
+		},
+		onClose: func() { closedAt = time.Now() },
+	}
+	err = run(context.Background(), cfg, Options{ConfigPath: cfgPath}, dependencies{
+		newSender: func(string) sendSession { return sess },
+		settle:    60 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if sentAt.IsZero() || closedAt.IsZero() {
+		t.Fatal("send and close must both have happened")
+	}
+	if hold := closedAt.Sub(sentAt); hold < 60*time.Millisecond {
+		t.Errorf("connection held for %s, want >= 60ms settle (helper must answer first)", hold)
+	}
+}
 
 func TestRunPersistsPlanBeforeFirstPacket(t *testing.T) {
 	t.Parallel()
