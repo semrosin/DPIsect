@@ -4,13 +4,15 @@ package capture
 
 import (
 	"context"
+	"errors"
 	"net"
+	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/gopacket/pcapgo"
-	"os"
 )
 
 // TestLiveLoopback requires CAP_NET_RAW (docs/GO_STYLE.md §5): it
@@ -22,6 +24,9 @@ func TestLiveLoopback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := l.Start(ctx); err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("requires CAP_NET_RAW: %v", err)
+		}
 		t.Fatalf("Start: %v", err)
 	}
 
