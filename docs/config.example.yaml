@@ -1,0 +1,40 @@
+# Example experiment config. Copy to
+# experiments/<experiment_id>/config.yaml and edit.
+# Schema: internal/runner (Config); report front-matter:
+# docs/EXPERIMENTS.md §4; safety limits: docs/SAFETY.md §3.
+
+question_id: B01
+experiment_id: b01-sni-padding-2026-11
+mode: valid-session # valid-session | raw-experiment
+
+endpoint:
+  role: helper # lab | helper | target (raw is forbidden for target)
+  ip: 192.0.2.10
+  port: 443
+
+budget: # zero fields default to docs/SAFETY.md §3 limits
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  stop_conditions: []
+
+schedule:
+  repetitions: 5
+  seed: 42
+  inter_trial_gap_ms: 100
+  state_reset: none # how state is cleared between repetitions
+
+capture: # outside git, see docs/SAFETY.md §5
+  client: artifacts/b01-sni-padding-2026-11/client.pcap
+  server: artifacts/b01-sni-padding-2026-11/server.pcap
+helper_log: artifacts/b01-sni-padding-2026-11/helper.log
+runner_log: artifacts/b01-sni-padding-2026-11/runner.log
+
+# Must be fixed before the first packet is sent
+# (docs/EXPERIMENTS.md §2).
+classification_rule: |
+  Control and treatment differ only in the SNI value. Confirmed iff the
+  control profile succeeds and the treatment profile is blocked across
+  all repetitions with identical budget and schedule; refuted if the
+  treatment succeeds; inconclusive if observations are insufficient.
