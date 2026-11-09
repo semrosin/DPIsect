@@ -171,6 +171,34 @@ func ParseClientHello(payload []byte) (ClientHello, error) {
 	return out, nil
 }
 
+// ParseServerHello parses the handshake payload of a record that must
+// contain a single ServerHello message and returns the selected cipher
+// suite — the value the analyzer checks against the client's offer
+// (question H01, cause modification).
+func ParseServerHello(payload []byte) (cipherSuite uint16, err error) {
+	if len(payload) < 4 {
+		return 0, fmt.Errorf("handshake too short: %d", len(payload))
+	}
+	if payload[0] != 0x02 {
+		return 0, fmt.Errorf("handshake type %#x, want server_hello", payload[0])
+	}
+	hsLen := int(payload[1])<<16 | int(payload[2])<<8 | int(payload[3])
+	body := payload[4:]
+	if hsLen > len(body) {
+		return 0, fmt.Errorf("handshake length %d exceeds payload %d", hsLen, len(body))
+	}
+	body = body[:hsLen]
+	// server_version(2) + random(32) + legacy_session_id_echo
+	if len(body) < 35 {
+		return 0, fmt.Errorf("server_hello body too short: %d", len(body))
+	}
+	off := 34 + 1 + int(body[34])
+	if off+2 > len(body) {
+		return 0, fmt.Errorf("server_hello truncated at cipher suite")
+	}
+	return binary.BigEndian.Uint16(body[off : off+2]), nil
+}
+
 // parseServerName parses the server_name extension data: list length,
 // name type, host_name only.
 func parseServerName(b []byte) (string, error) {
