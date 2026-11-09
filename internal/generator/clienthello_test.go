@@ -36,6 +36,32 @@ func TestBuildClientHelloWellFormed(t *testing.T) {
 	}
 }
 
+func TestBuildClientHelloAdvertisesVersionsAndECDSACiphers(t *testing.T) {
+	t.Parallel()
+
+	payload, err := BuildClientHello("example.com", [32]byte{})
+	if err != nil {
+		t.Fatalf("BuildClientHello: %v", err)
+	}
+
+	// supported_versions: type 0x002b, len 5, TLS 1.3 and TLS 1.2.
+	wantVersions := []byte{0x00, 0x2b, 0x00, 0x05, 0x04, 0x03, 0x04, 0x03, 0x03}
+	if !bytes.Contains(payload, wantVersions) {
+		t.Error("payload lacks the supported_versions extension (TLS 1.3 + 1.2)")
+	}
+	// ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: required for ECDSA
+	// server certificates such as the helper's.
+	if !bytes.Contains(payload, []byte{0xc0, 0x2b}) {
+		t.Error("payload lacks the ECDHE ECDSA cipher 0xc02b")
+	}
+	// signature_algorithms: type 0x000d, ext length 18 (0x0012),
+	// vector length 16 (0x0010) — present for modern servers to
+	// choose a signature scheme.
+	if !bytes.Contains(payload, []byte{0x00, 0x0d, 0x00, 0x12, 0x00, 0x10}) {
+		t.Error("payload lacks the signature_algorithms extension")
+	}
+}
+
 func TestBuildClientHelloDeterministic(t *testing.T) {
 	t.Parallel()
 
