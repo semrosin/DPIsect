@@ -45,27 +45,27 @@ const ThrottleGapThreshold = 50 * time.Millisecond
 
 // CauseObservation is the measurement for one client-side PCAP.
 type CauseObservation struct {
-	Cause  Cause
-	Reason string // short; required when Cause is CauseInconclusive
+	Cause  Cause  `json:"cause"`
+	Reason string `json:"reason"` // short; required when Cause is CauseInconclusive
 
-	ClientAddr       string
-	ServerAddr       string
-	Packets          int
-	SawClientHello   bool
-	SawServerHello   bool
-	SelectedCipher   string // hex, e.g. "0x1301"; empty without ServerHello
-	ServerAlert      bool
-	AlertLevel       int
-	AlertDescription int
-	ServerRST        bool
-	CompletedHTTP    bool
+	ClientAddr       string `json:"client_addr"`
+	ServerAddr       string `json:"server_addr"`
+	Packets          int    `json:"packets"`
+	SawClientHello   bool   `json:"saw_client_hello"`
+	SawServerHello   bool   `json:"saw_server_hello"`
+	SelectedCipher   string `json:"selected_cipher"` // hex, e.g. "0x1301"; empty without ServerHello
+	ServerAlert      bool   `json:"server_alert"`
+	AlertLevel       int    `json:"alert_level"`
+	AlertDescription int    `json:"alert_description"`
+	ServerRST        bool   `json:"server_rst"`
+	CompletedHTTP    bool   `json:"completed_http"`
 	// MaxServerGap is the largest inter-arrival gap between
-	// consecutive server data segments.
-	MaxServerGap time.Duration
+	// consecutive server data segments, in nanoseconds.
+	MaxServerGap time.Duration `json:"max_server_gap_ns"`
 	// StreamGap reports a TCP reassembly discontinuity (loss,
 	// retransmission or out-of-order capture): classification must not
 	// claim drop on such a trace.
-	StreamGap bool
+	StreamGap bool `json:"stream_gap"`
 }
 
 // ClassifyPCAP reads a client-side PCAP and reports which known cause
