@@ -6,7 +6,11 @@
 // runner and tests, never by the prober or helper binaries.
 package lab
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
 
 // Profile is one impairment configuration for a lab link.
 type Profile struct {
@@ -15,11 +19,36 @@ type Profile struct {
 	// LossPercent is the tc netem loss probability, 0..100.
 	LossPercent float64
 	// ReorderPercent is the tc netem reorder probability, 0..100.
+	// tc rejects reorder without a non-zero delay, so Validate
+	// requires DelayMS > 0 whenever it is set (question H02).
 	ReorderPercent float64
 	// DelayMS is the fixed netem delay in milliseconds.
 	DelayMS int
 	// MTU overrides the link MTU; zero leaves it unchanged.
 	MTU int
+}
+
+// Validate checks the profile against what tc/netem accepts and
+// against the safety of the stand.
+func (p Profile) Validate() error {
+	var errs []error
+	if p.LossPercent < 0 || p.LossPercent > 100 {
+		errs = append(errs, fmt.Errorf("loss %g out of 0..100", p.LossPercent))
+	}
+	if p.ReorderPercent < 0 || p.ReorderPercent > 100 {
+		errs = append(errs, fmt.Errorf("reorder %g out of 0..100", p.ReorderPercent))
+	}
+	if p.DelayMS < 0 {
+		errs = append(errs, fmt.Errorf("delay %d must not be negative", p.DelayMS))
+	}
+	if p.MTU < 0 {
+		errs = append(errs, fmt.Errorf("mtu %d must not be negative", p.MTU))
+	}
+	if p.ReorderPercent > 0 && p.DelayMS == 0 {
+		errs = append(errs, fmt.Errorf(
+			"reorder %g requires a non-zero delay (tc netem)", p.ReorderPercent))
+	}
+	return errors.Join(errs...)
 }
 
 // Controller applies and removes profiles on the stand.
