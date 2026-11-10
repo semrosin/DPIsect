@@ -1,0 +1,44 @@
+question_id: H03
+experiment_id: h03-capture-retry-2026-11
+mode: valid-session
+sni: control.example
+endpoint:
+  role: lab
+  ip: 127.0.0.1
+  port: 18443
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  stop_conditions:
+    - приближение к лимиту
+    - рост повторных передач
+    - аномалия
+schedule:
+  repetitions: 1
+  seed: 42
+  inter_trial_gap_ms: 100
+  state_reset: none
+preflight:
+  enabled: false
+  host: ""
+  independent_resolver: ""
+lab:
+  enabled: false
+  config_id: loopback-unimpaired
+  loss_percent: 0
+  reorder_percent: 0
+  delay_ms: 0
+  mtu: 0
+capture:
+  client: artifacts/h03-capture-retry-2026-11/client.pcap
+  server: artifacts/h03-capture-retry-2026-11/server.pcap
+helper_log: artifacts/h03-capture-retry-2026-11/helper.log
+runner_log: artifacts/h03-capture-retry-2026-11/runner.log
+classification_rule: |
+  For this local control only: confirmed if the client and server capture
+  both contain the planned ClientHello bytes and the helper records their
+  receipt; refuted if complete evidence demonstrates a mismatch; otherwise
+  inconclusive. Two captures on loopback are not independent network
+  vantage points and do not validate physical wire fields or offload.

@@ -1,0 +1,24 @@
+{
+  "experiment_id": "h03-capture-retry-2026-11",
+  "question_id": "H03",
+  "tool_version": "0.1.0-stage1-capture-fix",
+  "tool_commit": "working-tree-cadd3f0",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-10T16:17:08Z",
+  "finished_utc": "2026-11-10T16:17:09Z",
+  "operator": "qjolk",
+  "config_file": "experiments/h03-capture-retry-2026-11/config.yaml",
+  "lab_config_id": "loopback-unimpaired",
+  "artifacts": {
+    "artifacts/h03-capture-retry-2026-11/client.pcap": "31d479732a4a3fac4b2be58ff4bd8a4b3e74486ce4d5caa476ad007efa931e76",
+    "artifacts/h03-capture-retry-2026-11/helper.log": "299fb48bb8f7c9f38aa4c9a41eafd940a98ea6e984873490741b28f7891f83b1",
+    "artifacts/h03-capture-retry-2026-11/runner.log": "e369169180e9dc4dc55f09399a6da04916fa5d75a672eeda4e7652ab23490bb0",
+    "artifacts/h03-capture-retry-2026-11/server.pcap": "146d0e33cb4fccca174e7335d4c4b3a088e3de5e9f9e73f706327efd8ba789cf"
+  }
+}
