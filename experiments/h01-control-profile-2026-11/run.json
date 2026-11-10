@@ -1,0 +1,22 @@
+{
+  "experiment_id": "h01-control-profile-2026-11",
+  "question_id": "H01",
+  "tool_version": "0.1.0-stage1",
+  "tool_commit": "65b79f6",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-09T14:39:28Z",
+  "finished_utc": "2026-11-09T14:39:29Z",
+  "operator": "Darya Nechaeva",
+  "config_file": "experiments/h01-control-profile-2026-11/config.yaml",
+  "lab_config_id": "control-unimpaired",
+  "artifacts": {
+    "artifacts/h01-control-profile-2026-11/helper.log": "14406230dfc2ae225df15d91526dca149beea85d2b79efcb091fd497bcdadf38",
+    "artifacts/h01-control-profile-2026-11/runner.log": "9eb43fd73d8a7ee59be325147551eb581c20a577c5639214c652966eaab24cd0"
+  }
+}

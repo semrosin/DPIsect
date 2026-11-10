@@ -103,7 +103,8 @@ Baseline: [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments),
 - Fixtures с известными причинами (`drop`, `rst_injection`,
   `tls_alert`, `throttling`) — эталонные трассы в `testdata/`, на них
   проверяется классификатор. Разметка и границы применимости — рядом
-  с fixture.
+  с fixture. Fixtures в git (исключение `!testdata/**/*.pcap` в
+  `.gitignore`); сырые артефакты опытов — вне git (`SAFETY.md` §5).
 - Для воспроизводимости — `go test -count=1 ./...` при проверке
   изменений поведения (не полагаться на кэш результатов).
 - `go test -race ./...` — перед push, если изменение касается
@@ -154,7 +155,7 @@ Baseline: [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments),
 
 - Не хранить в коде и в git: ключи, `SSLKEYLOGFILE`, токены.
 - Конфиги экспериментов — в `experiments/<experiment_id>/` или в `docs/`
-  (если это шаблон, а не результат).
+  (если это шаблон, а не результат); шаблон — `docs/config.example.yaml`.
 - `*.pcap*`, `*.key`, `SSLKEYLOGFILE` — в `.gitignore`.
 
 Версионирование бинаря:
