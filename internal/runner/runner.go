@@ -209,6 +209,9 @@ func run(ctx context.Context, cfg Config, opts Options, deps dependencies) error
 		}
 	}
 
+	if cfg.Endpoint.Role != RoleTarget {
+		logger.Info("server hashes pending finalization", "event", "server_hashes_pending")
+	}
 	logger.Info("run complete", "event", "run_complete",
 		"packets", sentPackets, "bytes", sentBytes)
 	if err := logFile.Close(); err != nil {
@@ -219,8 +222,6 @@ func run(ctx context.Context, cfg Config, opts Options, deps dependencies) error
 	// (e.g. capture skipped) are recorded by absence, not fabricated.
 	artifacts, err := hashArtifacts(logger, []string{
 		captureClientPath(live, cfg.Capture.Client),
-		cfg.Capture.Server,
-		cfg.HelperLog,
 		cfg.RunnerLog,
 	})
 	if err != nil {

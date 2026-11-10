@@ -63,9 +63,17 @@ config.yaml
 | Отправка | runner → sender | По одному пакету плана; raw-путь — только при установленном флаге и подтверждении; бюджет и kill switch — на стороне runner (`SAFETY.md` §3) |
 | Preflight | runner → dnsprobe | Имя для резолва, независимый резолвер, endpoint; результаты — в observations (`dns_log`) |
 | План пакетов | runner → `plan.yaml` | Персистентность плана до первого пакета (`EXPERIMENTS.md` §2) |
-| Метаданные прогона | runner → `run.json` | Версии бинаря и зависимостей, seed, UTC-времена, оператор, `lab_config_id`, пути и `sha256` артефактов (`H07`) |
+| Метаданные прогона | runner → `run.json` | Версии, seed, UTC-времена, оператор и хэши закрытых клиентских артефактов; после остановки helper команда `dpi-prober -finalize -config <config.yaml>` добавляет окончательные хэши серверных файлов (`H07`) |
 | Серверные события | helper → observations | `helper_log` + server PCAP (пути вне git, `sha256` в отчёте) |
 | `ClassificationResult` | analyzer ← observations | Измерения + классификация причин (`H01`); вердикт `confirmed` / `refuted` / `inconclusive` по `classification_rule` ставит оператор/агент (`EXPERIMENTS.md` §7) |
+
+Финализация не отправляет пакетов и не управляет helper. Оператор сначала
+останавливает helper и, если он удалённый, переносит завершённые серверный
+PCAP и журнал по путям из конфига; затем запускает `dpi-prober -finalize
+-config <config.yaml>`. До финализации `run.json` не содержит серверных
+хэшей. Финализация проверяет идентификатор опыта и наличие неизменившихся
+во время чтения файлов; остановку всех писателей подтверждает оператор.
+При ошибке прежний `run.json` сохраняется.
 
 `classification_rule` — проза в `config.yaml`, фиксируется до первого
 пакета; analyzer его не применяет. `analyzer` читает только артефакты;

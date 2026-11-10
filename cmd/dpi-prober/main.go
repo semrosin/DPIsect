@@ -33,6 +33,8 @@ func main() {
 func run(args []string) error {
 	fs := flag.NewFlagSet("dpi-prober", flag.ContinueOnError)
 	configPath := fs.String("config", "", "path to experiment config.yaml")
+	finalize := fs.Bool("finalize", false,
+		"after stopping helper, add final server artifact hashes to run.json")
 	allowRaw := fs.Bool("allow-raw", false,
 		"explicit confirmation for a raw-experiment run (docs/SAFETY.md §1)")
 	operator := fs.String("operator", "",
@@ -49,6 +51,20 @@ func run(args []string) error {
 	}
 	if *configPath == "" {
 		return errors.New("-config is required")
+	}
+	if *finalize && (*allowRaw || *operator != "" || *captureIface != "") {
+		return errors.New("-finalize cannot be combined with send or capture options")
+	}
+	if *finalize {
+		cfg, err := runner.Load(*configPath)
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		if err := runner.Finalize(cfg, *configPath); err != nil {
+			return fmt.Errorf("finalize: %w", err)
+		}
+		fmt.Println("server artifact hashes finalized")
+		return nil
 	}
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
