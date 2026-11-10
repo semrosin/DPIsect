@@ -3,12 +3,14 @@ package capture
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/afpacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcapgo"
 )
@@ -23,15 +25,15 @@ const linkType = layers.LinkTypeEthernet
 // flushEveryPCAPPackets bounds how many packets may sit in the buffer.
 const flushEveryPCAPPackets = 64
 
-// packetSource yields raw frames; afpacket.TPacket satisfies it on
-// Linux, tests inject fakes (docs/GO_STYLE.md §4).
+// packetSource yields raw frames. Reads must return periodically with
+// afpacket.ErrTimeout so the reader can stop before the source is closed.
 type packetSource interface {
 	ReadPacketData() (data []byte, ci gopacket.CaptureInfo, err error)
 	Close()
 }
 
 // Live is one PCAP recording at a single vantage point. Start spawns
-// the dedicated writer goroutine; Stop unblocks it, flushes and closes
+// the dedicated writer goroutine; Stop waits for it, flushes and closes
 // the file. Start and Stop must be called serially — the runner owns
 // that ordering (docs/ARCHITECTURE.md §1).
 type Live struct {
@@ -107,7 +109,7 @@ func (l *Live) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop unblocks the writer goroutine, waits for it, flushes the buffer
+// Stop waits for the bounded read to return, closes the source, flushes the buffer
 // and closes the file. It returns the first error observed by the
 // writer, if any. Stopping a non-running capture is a no-op.
 func (l *Live) Stop(_ context.Context) error {
@@ -121,8 +123,8 @@ func (l *Live) Stop(_ context.Context) error {
 	l.mu.Unlock()
 
 	close(stop)
-	src.Close()
 	<-done
+	src.Close()
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -157,13 +159,15 @@ func (l *Live) run(ctx context.Context) {
 
 		data, ci, err := l.src.ReadPacketData()
 		if err != nil {
+			if errors.Is(err, afpacket.ErrTimeout) {
+				continue
+			}
 			select {
 			case <-l.stop:
 				return
 			default:
 			}
-			// Unblock reads only when Stop closed the source;
-			// anything else is a real failure.
+			// Any non-timeout error before shutdown is a real failure.
 			l.mu.Lock()
 			l.firstErr = fmt.Errorf("read packet: %w", err)
 			l.mu.Unlock()
