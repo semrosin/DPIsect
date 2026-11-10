@@ -6,23 +6,29 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/afpacket"
 	"github.com/google/gopacket/pcapgo"
 )
 
-// fakeSource hands out a fixed list of frames, then blocks until
-// Close unblocks it with an error.
+// fakeSource hands out a fixed list of frames, then returns poll timeouts.
 type fakeSource struct {
-	mu        sync.Mutex
-	frames    [][]byte
-	infos     []gopacket.CaptureInfo
-	i         int
-	closed    chan struct{}
-	closeOnce sync.Once
-	drained   chan struct{}
+	mu               sync.Mutex
+	frames           [][]byte
+	infos            []gopacket.CaptureInfo
+	i                int
+	closed           chan struct{}
+	closeOnce        sync.Once
+	drained          chan struct{}
+	reading          atomic.Bool
+	closedDuringRead atomic.Bool
+	timedOut         atomic.Bool
+	resumed          chan struct{}
+	resumeOnce       sync.Once
 }
 
 func newFakeSource(frames [][]byte, infos []gopacket.CaptureInfo) *fakeSource {
@@ -31,10 +37,16 @@ func newFakeSource(frames [][]byte, infos []gopacket.CaptureInfo) *fakeSource {
 		infos:   infos,
 		closed:  make(chan struct{}),
 		drained: make(chan struct{}),
+		resumed: make(chan struct{}),
 	}
 }
 
 func (f *fakeSource) ReadPacketData() ([]byte, gopacket.CaptureInfo, error) {
+	f.reading.Store(true)
+	defer f.reading.Store(false)
+	if f.timedOut.Load() {
+		f.resumeOnce.Do(func() { close(f.resumed) })
+	}
 	f.mu.Lock()
 	if f.i < len(f.frames) {
 		data := f.frames[f.i]
@@ -52,10 +64,16 @@ func (f *fakeSource) ReadPacketData() ([]byte, gopacket.CaptureInfo, error) {
 	select {
 	case <-f.closed:
 		return nil, gopacket.CaptureInfo{}, errors.New("source closed")
+	case <-time.After(10 * time.Millisecond):
+		f.timedOut.Store(true)
+		return nil, gopacket.CaptureInfo{}, afpacket.ErrTimeout
 	}
 }
 
 func (f *fakeSource) Close() {
+	if f.reading.Load() {
+		f.closedDuringRead.Store(true)
+	}
 	f.closeOnce.Do(func() { close(f.closed) })
 }
 
@@ -178,11 +196,10 @@ func TestLiveStopWithoutStartIsNoop(t *testing.T) {
 	}
 }
 
-func TestLiveStopUnblocksReader(t *testing.T) {
+func TestLiveStopWaitsForReader(t *testing.T) {
 	t.Parallel()
 
-	// The source blocks after its frames; Stop must close it and the
-	// resulting read error must not be reported as a failure.
+	// An idle source times out until shutdown; Close must not race Read.
 	frames, infos := testFrames()
 	src := newFakeSource(frames, infos)
 	l := newLive(PointClient, "lo", filepath.Join(t.TempDir(), "b.pcap"),
@@ -191,8 +208,21 @@ func TestLiveStopUnblocksReader(t *testing.T) {
 	if err := l.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	select {
+	case <-src.drained:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for frames")
+	}
+	select {
+	case <-src.resumed:
+	case <-time.After(time.Second):
+		t.Fatal("capture did not resume after an ordinary poll timeout")
+	}
 	if err := l.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop: %v", err)
+	}
+	if src.closedDuringRead.Load() {
+		t.Fatal("source closed while a read was active")
 	}
 }
 
