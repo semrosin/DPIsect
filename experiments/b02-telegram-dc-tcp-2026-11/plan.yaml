@@ -1,0 +1,31 @@
+experiment_id: b02-telegram-dc-tcp-2026-11
+question_id: B02
+mode: valid-session
+tcp_only: true
+endpoint:
+    role: target
+    ip: 149.154.175.50
+    port: 443
+trials:
+    - {}
+inter_trial_gap_ms: 0
+trial_timeout_ms: 3000
+state_reset: none
+budget:
+    max_packets: 100
+    max_bytes: 102400
+    max_rate_pps: 10
+    max_duration_s: 60
+    stop_conditions:
+        - first repeated SYN
+        - budget threshold
+        - capture error or drops
+        - abnormal channel behavior
+        - SIGINT
+    max_syn_retransmissions: 1
+classification_rule: |
+    Record the TCP connection outcome and captured packets for this endpoint.
+    This single connection does not answer B02; the B02 result remains
+    inconclusive. A connection, refusal, timeout or capture failure does not
+    establish where or why interference occurred or whether Telegram Web works.
+wire_notes: ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions
