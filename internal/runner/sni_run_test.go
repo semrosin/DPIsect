@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,25 @@ type testPairCapture struct {
 	channelWireSource
 	file   *os.File
 	writer *pcapgo.Writer
+}
+
+func TestHistoricalObservationsDoNotInventRetryCount(t *testing.T) {
+	t.Parallel()
+
+	var old sniObservations
+	if err := json.Unmarshal([]byte(`{"observed_packets":20}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if old.ObservedSYNRetransmissions != nil {
+		t.Fatal("old observations did not measure SYN retransmissions")
+	}
+	var current sniObservations
+	if err := json.Unmarshal([]byte(`{"observed_syn_retransmissions":0}`), &current); err != nil {
+		t.Fatal(err)
+	}
+	if current.ObservedSYNRetransmissions == nil || *current.ObservedSYNRetransmissions != 0 {
+		t.Fatal("new observations must preserve a measured zero")
+	}
 }
 
 func (s *testPairCapture) Record(frame []byte, ci gopacket.CaptureInfo) error {
@@ -57,6 +77,8 @@ func TestSNIComparisonRunsAfterPlanAndSavesResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Budget.StopConditions = []string{"budget limit", "capture failure", "SIGINT"}
+	maxRetries := 3
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
 	frame := testTCPFrame(t, "127.0.0.1", "127.0.0.1", 50000, uint16(addr.Port))
 	open := func(_, path string) (pairWireSource, error) {
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -74,7 +96,7 @@ func TestSNIComparisonRunsAfterPlanAndSavesResults(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err = runSNIComparison(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open)
+	err = runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open)
 	if err != nil {
 		t.Fatalf("run paired trials: %v", err)
 	}
@@ -109,11 +131,14 @@ func TestSNIComparisonRequiresPlanMetadata(t *testing.T) {
 		t.Fatal("capture must not start without required metadata")
 		return nil, nil
 	}
-	if err := runSNIComparison(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err == nil {
+	if err := runObservedSeries(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err == nil {
 		t.Fatal("missing stop conditions must fail")
 	}
 	cfg.Budget.StopConditions = []string{"SIGINT"}
-	if err := runSNIComparison(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo"}, open); err == nil {
+	if err := runObservedSeries(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo"}, open); err == nil {
 		t.Fatal("missing operator must fail")
+	}
+	if err := runObservedSeries(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err == nil {
+		t.Fatal("missing planned SYN retry threshold must fail")
 	}
 }

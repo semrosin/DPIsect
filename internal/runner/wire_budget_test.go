@@ -2,6 +2,7 @@ package runner
 
 import (
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,9 +12,14 @@ import (
 
 func testTCPFrame(t *testing.T, src, dst string, sport, dport uint16) []byte {
 	t.Helper()
+	return testTCPFrameWithSeq(t, src, dst, sport, dport, 0)
+}
+
+func testTCPFrameWithSeq(t *testing.T, src, dst string, sport, dport uint16, seq uint32) []byte {
+	t.Helper()
 	ip := &layers.IPv4{Version: 4, IHL: 5, TTL: 64, Protocol: layers.IPProtocolTCP,
 		SrcIP: net.ParseIP(src).To4(), DstIP: net.ParseIP(dst).To4()}
-	tcp := &layers.TCP{SrcPort: layers.TCPPort(sport), DstPort: layers.TCPPort(dport), SYN: true}
+	tcp := &layers.TCP{SrcPort: layers.TCPPort(sport), DstPort: layers.TCPPort(dport), SYN: true, Seq: seq}
 	if err := tcp.SetNetworkLayerForChecksum(ip); err != nil {
 		t.Fatal(err)
 	}
@@ -23,6 +29,35 @@ func testTCPFrame(t *testing.T, src, dst string, sport, dport uint16) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func TestWireBudgetStopsOnPlannedSYNRetry(t *testing.T) {
+	t.Parallel()
+
+	limit := 1
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{
+		MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 10, MaxSYNRetransmissions: &limit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := testTCPFrame(t, "192.0.2.1", "192.0.2.10", 50000, 443)
+	other := testTCPFrame(t, "192.0.2.1", "192.0.2.10", 50001, 443)
+	newSequence := testTCPFrameWithSeq(t, "192.0.2.1", "192.0.2.10", 50000, 443, 12345)
+	inbound := testTCPFrame(t, "192.0.2.10", "192.0.2.1", 443, 50000)
+	now := time.Unix(100, 0)
+	for _, frame := range [][]byte{first, other, newSequence, inbound} {
+		if err := budget.observe(frame, len(frame), now); err != nil {
+			t.Fatalf("first SYNs and inbound traffic must not count as retries: %v", err)
+		}
+	}
+	err = budget.observe(first, len(first), now.Add(time.Second))
+	if err == nil || !strings.Contains(err.Error(), "SYN retransmission") {
+		t.Fatalf("repeated SYN error = %v, want retransmission stop", err)
+	}
+	if budget.synRetransmissions != 1 {
+		t.Fatalf("SYN retransmissions = %d, want 1", budget.synRetransmissions)
+	}
 }
 
 func TestWireBudgetCountsBothDirectionsAndRetransmissions(t *testing.T) {

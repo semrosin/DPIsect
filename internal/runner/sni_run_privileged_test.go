@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,12 +38,14 @@ func TestSNIComparisonCapturesLoopback(t *testing.T) {
 	// isolated local test of capture and not a target experiment.
 	cfg.Budget.MaxRatePPS = 100
 	cfg.Budget.StopConditions = []string{"budget limit", "capture failure", "SIGINT"}
+	maxRetries := 3 // loopback may expose two copies of one SYN
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	open := func(iface, path string) (pairWireSource, error) {
 		return newAFPacketWireSource(iface, path)
 	}
-	if err := runSNIComparison(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err != nil {
+	if err := runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err != nil {
 		t.Fatalf("paired loopback run: %v", err)
 	}
 	f, err := os.Open(filepath.Join(dir, "client.pcap"))
@@ -83,6 +88,108 @@ func TestSNIComparisonCapturesLoopback(t *testing.T) {
 	}
 }
 
+func TestTCPControlCapturesLoopbackWithoutPayload(t *testing.T) {
+	dir := t.TempDir()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	addr := listener.Addr().(*net.TCPAddr)
+	received := make(chan []byte, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			received <- nil
+			return
+		}
+		defer conn.Close()
+		data, _ := io.ReadAll(conn)
+		received <- data
+	}()
+	content := strings.Replace(tcpControlConfigYAML(dir), "port: 443", fmt.Sprintf("port: %d", addr.Port), 1)
+	configPath := writeRunConfig(t, dir, content)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Endpoint.Role = RoleHelper
+	cfg.Capture.Server = filepath.Join(dir, "unused-server.pcap")
+	cfg.Budget.MaxRatePPS = 100
+	maxRetries := 3 // loopback may expose two copies of one SYN
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	open := func(iface, path string) (pairWireSource, error) {
+		return newAFPacketWireSource(iface, path)
+	}
+	if err := runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err != nil {
+		t.Fatalf("TCP control: %v", err)
+	}
+	if data := <-received; len(data) != 0 {
+		t.Fatalf("TCP control sent %d application bytes", len(data))
+	}
+	f, err := os.Open(filepath.Join(dir, "client.pcap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	r, err := pcapgo.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packets := 0
+	for {
+		frame, _, err := r.ReadPacketData()
+		if err != nil {
+			break
+		}
+		packet := gopacket.NewPacket(frame, layers.LayerTypeEthernet, gopacket.NoCopy)
+		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+			packets++
+			if payload := tcpLayer.(*layers.TCP).Payload; len(payload) != 0 {
+				t.Fatalf("captured TCP payload: %d bytes", len(payload))
+			}
+		}
+	}
+	if packets == 0 {
+		t.Fatal("capture contains no TCP packets")
+	}
+}
+
+func TestTCPControlStopsOnRealSYNRetry(t *testing.T) {
+	if _, err := net.InterfaceByName("dpisect0"); err != nil {
+		t.Skip("requires an isolated namespace with the dpisect0 test veth")
+	}
+	dir := t.TempDir()
+	content := strings.Replace(tcpControlConfigYAML(dir), "127.0.0.1", "192.0.2.2", 1)
+	configPath := writeRunConfig(t, dir, content)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	open := func(iface, path string) (pairWireSource, error) {
+		return newAFPacketWireSource(iface, path)
+	}
+	err = runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "dpisect0", Operator: "tester"}, open)
+	if err == nil || !strings.Contains(err.Error(), "SYN retransmission") {
+		t.Fatalf("want stop on SYN retry, got %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "tcp-observations.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obs sniObservations
+	if err := json.Unmarshal(data, &obs); err != nil {
+		t.Fatal(err)
+	}
+	if !obs.TCPOnly || obs.ObservedSYNRetransmissions == nil || *obs.ObservedSYNRetransmissions != 1 || len(obs.Trials) != 1 || obs.StopReason == "" {
+		t.Fatalf("unexpected TCP observations: %+v", obs)
+	}
+}
+
 func TestSNIComparisonStopsAtObservedLimit(t *testing.T) {
 	dir := t.TempDir()
 	server := httptest.NewUnstartedServer(nil)
@@ -97,13 +204,15 @@ func TestSNIComparisonStopsAtObservedLimit(t *testing.T) {
 	}
 	cfg.Budget.MaxRatePPS = 100
 	cfg.Budget.StopConditions = []string{"budget limit", "capture failure", "SIGINT"}
+	maxRetries := 3
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
 	cfg.Schedule.InterTrialGapMS = 100
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	open := func(iface, path string) (pairWireSource, error) {
 		return newAFPacketWireSource(iface, path)
 	}
-	if err := runSNIComparison(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err == nil {
+	if err := runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err == nil {
 		t.Fatal("want cancellation when capture reaches the packet limit")
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "sni-observations.json"))

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/semrosin/DPIsect/internal/runner"
@@ -89,5 +90,31 @@ classification_rule: recorded separately
 	}
 	if err := run([]string{"-config", config, "-prepare-sni", "-capture-iface", "lo"}); err == nil {
 		t.Fatal("prepare must reject capture options")
+	}
+}
+
+func TestTCPControlCommandRequiresCapture(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yaml")
+	yaml := fmt.Sprintf(`question_id: B02
+experiment_id: b02-tcp-control-2026-11
+mode: valid-session
+tcp_only: true
+endpoint: {role: target, ip: 127.0.0.1, port: 443}
+budget: {max_syn_retransmissions: 1, stop_conditions: [SYN retry]}
+schedule: {repetitions: 1}
+capture: {client: %q}
+runner_log: %q
+classification_rule: TCP result only
+`, filepath.Join(dir, "client.pcap"), filepath.Join(dir, "runner.log"))
+	if err := os.WriteFile(config, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := run([]string{"-config", config, "-operator", "tester"})
+	if err == nil || !strings.Contains(err.Error(), "capture interface") {
+		t.Fatalf("TCP command error = %v, want capture refusal", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "plan.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("command must not write a plan or send: %v", err)
 	}
 }

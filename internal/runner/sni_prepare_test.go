@@ -93,6 +93,13 @@ func TestPairedConfigRejectsInvalidInputs(t *testing.T) {
 		{"unsupported state reset", func(c *Config) { c.Schedule.StateReset = "flush" }},
 		{"IPv6 endpoint", func(c *Config) { c.Endpoint.IP = "2001:db8::1" }},
 		{"timeout exceeds budget", func(c *Config) { c.PairedTimeoutMS = 61000 }},
+		{"invalid SYN retry limit", func(c *Config) { n := 0; c.Budget.MaxSYNRetransmissions = &n }},
+		{"ignored preflight", func(c *Config) {
+			c.Preflight.Enabled = true
+			c.Preflight.Host = "example.com"
+			c.Preflight.IndependentResolver = "192.0.2.53:53"
+		}},
+		{"ignored lab profile", func(c *Config) { c.Lab.Enabled = true; c.Lab.ConfigID = "test" }},
 		{"target packet budget", func(c *Config) { c.Endpoint.Role = RoleTarget; c.Budget.MaxPackets = 101 }},
 		{"target byte budget", func(c *Config) { c.Endpoint.Role = RoleTarget; c.Budget.MaxBytes = 102401 }},
 		{"target rate budget", func(c *Config) { c.Endpoint.Role = RoleTarget; c.Budget.MaxRatePPS = 11 }},

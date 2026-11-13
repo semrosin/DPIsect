@@ -185,3 +185,31 @@ func TestMonitoredSNITrialsStopAfterBudget(t *testing.T) {
 		t.Fatalf("error = %v, calls = %d, trials = %d, packets = %d", err, calls, len(trials), budget.packets)
 	}
 }
+
+func TestMonitoredSNITrialsStopOnSYNRetry(t *testing.T) {
+	t.Parallel()
+
+	frame := testTCPFrame(t, "192.0.2.1", "192.0.2.10", 50000, 443)
+	source := channelWireSource{frames: make(chan []byte, 2)}
+	limit := 1
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{
+		MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 10, MaxSYNRetransmissions: &limit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	probe := func(ctx context.Context, _, _ string) sender.TLSObservation {
+		calls++
+		source.frames <- frame
+		source.frames <- frame
+		<-ctx.Done()
+		return sender.TLSObservation{Stage: "tcp", Error: ctx.Err().Error()}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	trials, err := runMonitoredSNITrials(ctx, "192.0.2.10:443", []string{"a.example", "b.example"}, time.Second, 0, probe, source, budget)
+	if err == nil || !strings.Contains(err.Error(), "SYN retransmission") || calls != 1 || len(trials) != 1 || budget.synRetransmissions != 1 {
+		t.Fatalf("error = %v, calls = %d, trials = %d, retransmissions = %d", err, calls, len(trials), budget.synRetransmissions)
+	}
+}
