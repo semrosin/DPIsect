@@ -1,0 +1,40 @@
+question_id: B02
+experiment_id: b02-telegram-sni-pilot-2026-11
+mode: valid-session
+sni: www.telegram.org
+paired_sni: web.telegram.org
+paired_timeout_ms: 5000
+
+endpoint:
+  role: target
+  ip: 149.154.167.99
+  port: 443
+
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  stop_conditions:
+    - observed budget threshold
+    - capture error or dropped frames
+    - abnormal channel behavior
+    - SIGINT or SIGTERM
+
+schedule:
+  repetitions: 2
+  seed: 0
+  inter_trial_gap_ms: 3000
+  state_reset: none
+
+capture:
+  client: artifacts/b02-telegram-sni-pilot-2026-11/client.pcap
+runner_log: artifacts/b02-telegram-sni-pilot-2026-11/runner.log
+
+classification_rule: |
+  This is a feasibility pilot on one target address, not the full B02
+  address matrix. Record each attempt and the capture limitations. A
+  difference between names alone does not distinguish server behavior
+  from network interference. B02 remains inconclusive after this pilot;
+  do not classify an unstarted, interrupted, incomplete, or ambiguous
+  series as a confirmed or refuted result.
