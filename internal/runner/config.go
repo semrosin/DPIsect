@@ -38,13 +38,16 @@ type Config struct {
 	// PairedSNI requests a paired comparison; SNI is the control name.
 	PairedSNI string `yaml:"paired_sni,omitempty"`
 	// PairedTimeoutMS bounds each TCP/TLS attempt.
-	PairedTimeoutMS int          `yaml:"paired_timeout_ms,omitempty"`
-	Endpoint        Endpoint     `yaml:"endpoint"`
-	Budget          Budget       `yaml:"budget"`
-	Schedule        Schedule     `yaml:"schedule"`
-	Capture         CapturePaths `yaml:"capture"`
-	HelperLog       string       `yaml:"helper_log"`
-	RunnerLog       string       `yaml:"runner_log"`
+	PairedTimeoutMS int `yaml:"paired_timeout_ms,omitempty"`
+	// TCPOnly runs ordinary TCP connectivity controls without application data.
+	TCPOnly      bool         `yaml:"tcp_only,omitempty"`
+	TCPTimeoutMS int          `yaml:"tcp_timeout_ms,omitempty"`
+	Endpoint     Endpoint     `yaml:"endpoint"`
+	Budget       Budget       `yaml:"budget"`
+	Schedule     Schedule     `yaml:"schedule"`
+	Capture      CapturePaths `yaml:"capture"`
+	HelperLog    string       `yaml:"helper_log"`
+	RunnerLog    string       `yaml:"runner_log"`
 	// ClassificationRule must be fixed before the first packet is
 	// sent (docs/EXPERIMENTS.md §2); the verdict is set by the
 	// operator/agent, not by the analyzer (docs/EXPERIMENTS.md §7).
@@ -68,6 +71,9 @@ type Budget struct {
 	MaxRatePPS     int      `yaml:"max_rate_pps"`
 	MaxDurationS   int      `yaml:"max_duration_s"`
 	StopConditions []string `yaml:"stop_conditions"`
+	// MaxSYNRetransmissions is the per-connection observed retry threshold.
+	// A nil value preserves historical configurations but cannot run paired probes.
+	MaxSYNRetransmissions *int `yaml:"max_syn_retransmissions,omitempty"`
 }
 
 // Schedule controls repetitions and randomness of a run.
@@ -149,6 +155,9 @@ func (c *Config) applyDefaults() {
 	if c.PairedSNI != "" && c.PairedTimeoutMS == 0 {
 		c.PairedTimeoutMS = 5000
 	}
+	if c.TCPOnly && c.TCPTimeoutMS == 0 {
+		c.TCPTimeoutMS = 5000
+	}
 	d := DefaultBudget()
 	if c.Budget.MaxPackets == 0 {
 		c.Budget.MaxPackets = d.MaxPackets
@@ -191,9 +200,39 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf(
 			"endpoint.role %q must be lab, helper or target", c.Endpoint.Role))
 	}
-	if modeErr == nil && mode == generator.ValidSession && c.SNI == "" {
+	if modeErr == nil && mode == generator.ValidSession && !c.TCPOnly && c.SNI == "" {
 		errs = append(errs, errors.New(
 			"sni is required for a valid-session run (ClientHello)"))
+	}
+	if c.TCPOnly {
+		if modeErr == nil && mode != generator.ValidSession {
+			errs = append(errs, errors.New("tcp_only requires valid-session mode"))
+		}
+		if c.SNI != "" || c.PairedSNI != "" {
+			errs = append(errs, errors.New("tcp_only does not accept SNI fields"))
+		}
+		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
+			errs = append(errs, errors.New("tcp_only requires an IPv4 endpoint"))
+		}
+		if c.TCPTimeoutMS <= 0 || int64(c.TCPTimeoutMS) > int64(c.Budget.MaxDurationS)*1000 {
+			errs = append(errs, errors.New("tcp_timeout_ms must be positive and within the series duration"))
+		}
+		if c.Schedule.InterTrialGapMS < 0 || (c.Schedule.StateReset != "" && c.Schedule.StateReset != "none") {
+			errs = append(errs, errors.New("tcp_only requires a nonnegative gap and state_reset: none"))
+		}
+		if c.Schedule.Repetitions > c.Budget.MaxPackets {
+			errs = append(errs, errors.New("TCP attempts exceed packet budget before overhead"))
+		}
+		if c.Endpoint.Role == RoleTarget {
+			limits := DefaultBudget()
+			if c.Budget.MaxPackets > limits.MaxPackets || c.Budget.MaxBytes > limits.MaxBytes ||
+				c.Budget.MaxRatePPS > limits.MaxRatePPS || c.Budget.MaxDurationS > limits.MaxDurationS {
+				errs = append(errs, errors.New("TCP target budget exceeds target limits"))
+			}
+		}
+	}
+	if (c.TCPOnly || c.PairedSNI != "") && (c.Preflight.Enabled || c.Lab.Enabled) {
+		errs = append(errs, errors.New("TCP and paired SNI runs do not support preflight or lab profiles"))
 	}
 	if c.PairedSNI != "" {
 		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
@@ -253,6 +292,9 @@ func (c Config) Validate() error {
 	if c.Budget.MaxDurationS <= 0 {
 		errs = append(errs, errors.New("budget.max_duration_s must be positive"))
 	}
+	if c.Budget.MaxSYNRetransmissions != nil && *c.Budget.MaxSYNRetransmissions <= 0 {
+		errs = append(errs, errors.New("budget.max_syn_retransmissions must be positive"))
+	}
 
 	if c.Schedule.Repetitions < 1 {
 		errs = append(errs, errors.New("schedule.repetitions must be at least 1"))
@@ -261,7 +303,7 @@ func (c Config) Validate() error {
 	if c.Capture.Client == "" {
 		errs = append(errs, errors.New("capture.client path is required"))
 	}
-	if c.Capture.Server == "" && !(c.PairedSNI != "" && c.Endpoint.Role == RoleTarget) {
+	if c.Capture.Server == "" && !((c.PairedSNI != "" || c.TCPOnly) && c.Endpoint.Role == RoleTarget) {
 		errs = append(errs, errors.New("capture.server path is required"))
 	}
 	if c.RunnerLog == "" {

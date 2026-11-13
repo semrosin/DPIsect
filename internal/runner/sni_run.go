@@ -24,25 +24,29 @@ type pairWireSource interface {
 type pairSourceFactory func(iface, path string) (pairWireSource, error)
 
 type sniObservations struct {
-	Trials          []sniTrial `json:"trials"`
-	ObservedPackets int        `json:"observed_packets"`
-	ObservedBytes   int        `json:"observed_ethernet_bytes"`
-	CaptureDrops    uint       `json:"capture_drops"`
-	StopReason      string     `json:"stop_reason,omitempty"`
-	Limitation      string     `json:"limitation"`
+	TCPOnly                    bool       `json:"tcp_only,omitempty"`
+	Trials                     []sniTrial `json:"trials"`
+	ObservedPackets            int        `json:"observed_packets"`
+	ObservedBytes              int        `json:"observed_ethernet_bytes"`
+	CaptureDrops               uint       `json:"capture_drops"`
+	ObservedSYNRetransmissions *int       `json:"observed_syn_retransmissions,omitempty"`
+	StopReason                 string     `json:"stop_reason,omitempty"`
+	Limitation                 string     `json:"limitation"`
 }
 
-// runSNIComparison prepares the exact TLS bytes before opening any socket,
-// then starts capture and records each bounded attempt and its outcome.
-func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSourceFactory) error {
+// runObservedSeries persists its plan, starts capture and records each attempt.
+func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairSourceFactory) error {
 	if opts.CaptureIface == "" {
-		return errors.New("paired TLS requires a capture interface")
+		return errors.New("TCP and paired TLS runs require a capture interface")
 	}
 	if opts.ConfigPath == "" || open == nil {
-		return errors.New("paired TLS requires a config path and capture source")
+		return errors.New("TCP and paired TLS runs require a config path and capture source")
 	}
 	if strings.TrimSpace(opts.Operator) == "" || len(cfg.Budget.StopConditions) == 0 {
-		return errors.New("paired TLS requires an operator and planned stop conditions")
+		return errors.New("TCP and paired TLS runs require an operator and planned stop conditions")
+	}
+	if cfg.Budget.MaxSYNRetransmissions == nil || *cfg.Budget.MaxSYNRetransmissions <= 0 {
+		return errors.New("TCP and paired TLS runs require a planned SYN retransmission threshold")
 	}
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
@@ -54,7 +58,14 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Budget.MaxDurationS)*time.Second)
 	defer cancel()
 
-	plan, sessions, err := prepareSNIWirePlan(ctx, cfg, opts.ConfigPath)
+	var plan sniWirePlan
+	var sessions []*sender.PreparedTLS
+	var err error
+	if cfg.TCPOnly {
+		plan, err = prepareTCPWirePlan(cfg, opts.ConfigPath)
+	} else {
+		plan, sessions, err = prepareSNIWirePlan(ctx, cfg, opts.ConfigPath)
+	}
 	if err != nil {
 		return fmt.Errorf("prepare wire plan: %w", err)
 	}
@@ -76,7 +87,11 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 	if err := os.MkdirAll(filepath.Dir(cfg.RunnerLog), 0o700); err != nil {
 		return fmt.Errorf("create artifact directory: %w", err)
 	}
-	obsPath := filepath.Join(filepath.Dir(cfg.RunnerLog), "sni-observations.json")
+	obsName := "sni-observations.json"
+	if cfg.TCPOnly {
+		obsName = "tcp-observations.json"
+	}
+	obsPath := filepath.Join(filepath.Dir(cfg.RunnerLog), obsName)
 	obsFile, err := os.OpenFile(obsPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("reserve observations: %w", err)
@@ -105,6 +120,9 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 	}
 	index := 0
 	probe := func(ctx context.Context, addr, name string) sender.TLSObservation {
+		if cfg.TCPOnly {
+			return sender.TCPProbe(ctx, addr)
+		}
 		if index >= len(sessions) || name != plan.Trials[index].SNI {
 			return sender.TLSObservation{Stage: "tcp", Error: "trial does not match saved plan"}
 		}
@@ -113,9 +131,13 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 		defer session.Close()
 		return session.Start(ctx, addr)
 	}
-	logger.Info("paired series started", "event", "paired_start", "experiment", cfg.ExperimentID)
+	logger.Info("series started", "event", "series_start", "experiment", cfg.ExperimentID, "tcp_only", cfg.TCPOnly)
+	timeoutMS := cfg.PairedTimeoutMS
+	if cfg.TCPOnly {
+		timeoutMS = cfg.TCPTimeoutMS
+	}
 	trials, trialErr := runMonitoredSNITrials(ctx, addr, names,
-		time.Duration(cfg.PairedTimeoutMS)*time.Millisecond,
+		time.Duration(timeoutMS)*time.Millisecond,
 		time.Duration(cfg.Schedule.InterTrialGapMS)*time.Millisecond, probe, source, budget)
 	drops, dropsErr := source.Drops()
 	closeErr := source.stop()
@@ -128,8 +150,10 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 	}
 	runErr = errors.Join(runErr, trialErr, closeErr)
 	obs := sniObservations{
-		Trials: trials, ObservedPackets: budget.packets, ObservedBytes: budget.bytes, CaptureDrops: drops,
-		Limitation: "capture counts are interface observations; offload, packet loss and NAT can differ from the physical wire",
+		TCPOnly: cfg.TCPOnly,
+		Trials:  trials, ObservedPackets: budget.packets, ObservedBytes: budget.bytes, CaptureDrops: drops,
+		ObservedSYNRetransmissions: &budget.synRetransmissions,
+		Limitation:                 "capture counts are interface observations; offload, packet loss and NAT can differ from the physical wire",
 	}
 	if runErr != nil {
 		obs.StopReason = runErr.Error()
@@ -140,7 +164,7 @@ func runSNIComparison(ctx context.Context, cfg Config, opts Options, open pairSo
 	if err := obsFile.Close(); err != nil {
 		return errors.Join(runErr, fmt.Errorf("close observations: %w", err))
 	}
-	logger.Info("paired series stopped", "event", "paired_stop", "packets", budget.packets, "bytes", budget.bytes, "error", obs.StopReason)
+	logger.Info("series stopped", "event", "series_stop", "packets", budget.packets, "bytes", budget.bytes, "error", obs.StopReason)
 	if err := logFile.Close(); err != nil {
 		return errors.Join(runErr, fmt.Errorf("close runner log: %w", err))
 	}

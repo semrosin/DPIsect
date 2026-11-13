@@ -70,6 +70,9 @@ func run(args []string) error {
 	if cfg.PairedSNI != "" {
 		return fmt.Errorf("paired SNI capture analysis is not implemented; inspect individual trials")
 	}
+	if cfg.TCPOnly {
+		return fmt.Errorf("TCP control analysis is not implemented; inspect the capture and observations")
+	}
 	obs, err := analyzer.ClassifyPCAP(ctx, cfg.Capture.Client)
 	if err != nil {
 		return fmt.Errorf("classify %s: %w", cfg.Capture.Client, err)

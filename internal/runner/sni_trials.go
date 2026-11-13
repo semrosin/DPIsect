@@ -9,7 +9,7 @@ import (
 )
 
 type sniTrial struct {
-	SNI         string                `json:"sni"`
+	SNI         string                `json:"sni,omitempty"`
 	StartedUTC  string                `json:"started_utc"`
 	FinishedUTC string                `json:"finished_utc"`
 	Observation sender.TLSObservation `json:"observation"`

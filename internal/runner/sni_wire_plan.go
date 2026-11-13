@@ -13,14 +13,15 @@ import (
 )
 
 type sniWireTrial struct {
-	SNI    string                      `yaml:"sni"`
-	Packet generator.PlannedWirePacket `yaml:"packet"`
+	SNI    string                       `yaml:"sni,omitempty"`
+	Packet *generator.PlannedWirePacket `yaml:"packet,omitempty"`
 }
 
 type sniWirePlan struct {
 	ExperimentID string         `yaml:"experiment_id"`
 	QuestionID   string         `yaml:"question_id"`
 	Mode         string         `yaml:"mode"`
+	TCPOnly      bool           `yaml:"tcp_only,omitempty"`
 	Endpoint     Endpoint       `yaml:"endpoint"`
 	Trials       []sniWireTrial `yaml:"trials"`
 	GapMS        int            `yaml:"inter_trial_gap_ms"`
@@ -29,6 +30,32 @@ type sniWirePlan struct {
 	Budget       Budget         `yaml:"budget"`
 	Rule         string         `yaml:"classification_rule"`
 	WireNotes    string         `yaml:"wire_notes"`
+}
+
+// prepareTCPWirePlan records the kernel-managed TCP control before any dial.
+func prepareTCPWirePlan(cfg Config, configPath string) (sniWirePlan, error) {
+	if configPath == "" || !cfg.TCPOnly {
+		return sniWirePlan{}, errors.New("config path and tcp_only are required")
+	}
+	if err := cfg.Validate(); err != nil {
+		return sniWirePlan{}, fmt.Errorf("invalid config: %w", err)
+	}
+	plan := sniWirePlan{
+		ExperimentID: cfg.ExperimentID, QuestionID: cfg.QuestionID, Mode: cfg.Mode,
+		TCPOnly: true, Endpoint: cfg.Endpoint, GapMS: cfg.Schedule.InterTrialGapMS,
+		TimeoutMS: cfg.TCPTimeoutMS, StateReset: cfg.Schedule.StateReset,
+		Budget: cfg.Budget, Rule: cfg.ClassificationRule,
+		WireNotes: "ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions",
+		Trials:    make([]sniWireTrial, cfg.Schedule.Repetitions),
+	}
+	data, err := yaml.Marshal(plan)
+	if err != nil {
+		return sniWirePlan{}, fmt.Errorf("marshal TCP plan: %w", err)
+	}
+	if err := writeNewSNIWirePlan(filepath.Join(filepath.Dir(configPath), "plan.yaml"), data); err != nil {
+		return sniWirePlan{}, err
+	}
+	return plan, nil
 }
 
 // prepareSNIWirePlan holds each TLS handshake before its first write and saves
@@ -67,7 +94,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		}
 		sessions = append(sessions, session)
 		payload := session.ClientHello()
-		plan.Trials = append(plan.Trials, sniWireTrial{SNI: name, Packet: generator.PlannedWirePacket{
+		plan.Trials = append(plan.Trials, sniWireTrial{SNI: name, Packet: &generator.PlannedWirePacket{
 			Payload: payload, TLSRecordEnds: []int{len(payload)},
 		}})
 	}

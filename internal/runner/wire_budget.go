@@ -13,14 +13,22 @@ import (
 // Counts describe observed Ethernet frames, not a guarantee of physical-wire
 // packets when capture loses data or interface offloads are active.
 type wireBudget struct {
-	ip             net.IP
-	port           layers.TCPPort
-	limits         Budget
-	packets        int
-	bytes          int
-	recent         []time.Time
-	lastMatching   bool
-	maxFrameLength int
+	ip                 net.IP
+	port               layers.TCPPort
+	limits             Budget
+	packets            int
+	bytes              int
+	recent             []time.Time
+	lastMatching       bool
+	maxFrameLength     int
+	synSeen            map[synKey]int
+	synRetransmissions int
+}
+
+type synKey struct {
+	src  [4]byte
+	port layers.TCPPort
+	seq  uint32
 }
 
 func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
@@ -28,7 +36,10 @@ func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
 	if addr == nil || port < 1 || port > 65535 || limits.MaxPackets <= 0 || limits.MaxBytes <= 0 || limits.MaxRatePPS <= 0 {
 		return nil, fmt.Errorf("invalid wire budget or IPv4 endpoint")
 	}
-	return &wireBudget{ip: addr, port: layers.TCPPort(port), limits: limits}, nil
+	if limits.MaxSYNRetransmissions != nil && *limits.MaxSYNRetransmissions <= 0 {
+		return nil, fmt.Errorf("invalid SYN retransmission limit")
+	}
+	return &wireBudget{ip: addr, port: layers.TCPPort(port), limits: limits, synSeen: make(map[synKey]int)}, nil
 }
 
 // observe returns an error once an observed limit is reached or the frame
@@ -71,6 +82,19 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 	}
 	if b.maxFrameLength > 0 && originalLength > b.maxFrameLength {
 		return fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance; offload may obscure packet counts")
+	}
+	if b.limits.MaxSYNRetransmissions != nil && toTarget && tcp.DstPort == b.port && tcp.SYN && !tcp.ACK {
+		var key synKey
+		copy(key.src[:], ip.SrcIP.To4())
+		key.port, key.seq = tcp.SrcPort, tcp.Seq
+		seen := b.synSeen[key]
+		b.synSeen[key] = seen + 1
+		if seen > 0 {
+			b.synRetransmissions++
+			if seen >= *b.limits.MaxSYNRetransmissions {
+				return fmt.Errorf("wire budget: SYN retransmission limit reached (%d for one connection)", seen)
+			}
+		}
 	}
 	cutoff := now.Add(-time.Second)
 	keep := 0

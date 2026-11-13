@@ -7,14 +7,17 @@ import (
 	"net"
 )
 
-// TLSObservation reports the furthest stage reached by a normal TLS probe.
-// A TLS error may be a legitimate endpoint rejection or certificate failure.
-type TLSObservation struct {
+// ConnectionObservation reports the furthest stage reached by a TCP or TLS probe.
+// For a TCP-only probe, complete means TCP connected; TLS was not attempted.
+type ConnectionObservation struct {
 	Stage       string `json:"stage"`
 	Error       string `json:"error,omitempty"`
 	Version     uint16 `json:"tls_version,omitempty"`
 	CipherSuite uint16 `json:"cipher_suite,omitempty"`
 }
+
+// TLSObservation preserves the existing TLS sender interface.
+type TLSObservation = ConnectionObservation
 
 // TLSProbe connects to addr and verifies the server certificate against sni.
 // A nil roots uses the system trust store. The caller controls the deadline.

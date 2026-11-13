@@ -11,6 +11,8 @@ sni: example.com # ClientHello SNI (required for valid-session)
 # schedule.repetitions becomes the number of pairs for offline preparation.
 # paired_timeout_ms: 5000 # per-attempt TCP/TLS deadline
 # -prepare-sni writes only a logical schedule; execution requires -capture-iface.
+# TCP-only alternative: set tcp_only: true and tcp_timeout_ms: 5000;
+# omit both sni and paired_sni. No application data is sent.
 
 endpoint:
   role: helper # lab | helper | target (raw is forbidden for target)
@@ -22,6 +24,7 @@ budget: # zero fields default to docs/SAFETY.md §3 limits
   max_bytes: 102400
   max_rate_pps: 10
   max_duration_s: 60
+  max_syn_retransmissions: 1 # required for TCP-only and paired runs
   stop_conditions: []
 
 schedule:

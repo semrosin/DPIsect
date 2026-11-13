@@ -120,6 +120,7 @@ budget:
   max_bytes: 102400
   max_rate_pps: 10
   max_duration_s: 60
+  max_syn_retransmissions: 1 # обязательный порог для tcp_only и paired_sni
   stop_conditions: []
 planned_wire_packets: ...
 actual_wire_validation: ...
