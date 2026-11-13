@@ -67,6 +67,9 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	if cfg.PairedSNI != "" {
+		return fmt.Errorf("paired SNI capture analysis is not implemented; inspect individual trials")
+	}
 	obs, err := analyzer.ClassifyPCAP(ctx, cfg.Capture.Client)
 	if err != nil {
 		return fmt.Errorf("classify %s: %w", cfg.Capture.Client, err)

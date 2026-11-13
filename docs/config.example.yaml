@@ -7,6 +7,10 @@ question_id: B01
 experiment_id: b01-sni-padding-2026-11
 mode: valid-session # valid-session | raw-experiment
 sni: example.com # ClientHello SNI (required for valid-session)
+# paired_sni: web.telegram.org # optional treatment; sni is the control
+# schedule.repetitions becomes the number of pairs for offline preparation.
+# paired_timeout_ms: 5000 # per-attempt TCP/TLS deadline
+# -prepare-sni writes only a logical schedule; execution requires -capture-iface.
 
 endpoint:
   role: helper # lab | helper | target (raw is forbidden for target)

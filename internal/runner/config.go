@@ -34,13 +34,17 @@ type Config struct {
 	Mode         string `yaml:"mode"`
 	// SNI is the host name put into the ClientHello of a
 	// valid-session run; raw plans carry their own bytes.
-	SNI       string       `yaml:"sni"`
-	Endpoint  Endpoint     `yaml:"endpoint"`
-	Budget    Budget       `yaml:"budget"`
-	Schedule  Schedule     `yaml:"schedule"`
-	Capture   CapturePaths `yaml:"capture"`
-	HelperLog string       `yaml:"helper_log"`
-	RunnerLog string       `yaml:"runner_log"`
+	SNI string `yaml:"sni"`
+	// PairedSNI requests a paired comparison; SNI is the control name.
+	PairedSNI string `yaml:"paired_sni,omitempty"`
+	// PairedTimeoutMS bounds each TCP/TLS attempt.
+	PairedTimeoutMS int          `yaml:"paired_timeout_ms,omitempty"`
+	Endpoint        Endpoint     `yaml:"endpoint"`
+	Budget          Budget       `yaml:"budget"`
+	Schedule        Schedule     `yaml:"schedule"`
+	Capture         CapturePaths `yaml:"capture"`
+	HelperLog       string       `yaml:"helper_log"`
+	RunnerLog       string       `yaml:"runner_log"`
 	// ClassificationRule must be fixed before the first packet is
 	// sent (docs/EXPERIMENTS.md §2); the verdict is set by the
 	// operator/agent, not by the analyzer (docs/EXPERIMENTS.md §7).
@@ -142,6 +146,9 @@ func Load(path string) (Config, error) {
 // applyDefaults fills zero budget fields with docs/SAFETY.md §3
 // starting limits (docs/EXPERIMENTS.md §4).
 func (c *Config) applyDefaults() {
+	if c.PairedSNI != "" && c.PairedTimeoutMS == 0 {
+		c.PairedTimeoutMS = 5000
+	}
 	d := DefaultBudget()
 	if c.Budget.MaxPackets == 0 {
 		c.Budget.MaxPackets = d.MaxPackets
@@ -188,6 +195,41 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New(
 			"sni is required for a valid-session run (ClientHello)"))
 	}
+	if c.PairedSNI != "" {
+		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
+			errs = append(errs, errors.New("paired SNI requires an IPv4 endpoint"))
+		}
+		if c.Schedule.StateReset != "" && c.Schedule.StateReset != "none" {
+			errs = append(errs, errors.New("paired SNI supports only state_reset: none"))
+		}
+		if c.PairedTimeoutMS <= 0 || int64(c.PairedTimeoutMS) > int64(c.Budget.MaxDurationS)*1000 {
+			errs = append(errs, errors.New("paired_timeout_ms must be positive and within the series duration"))
+		}
+		if modeErr == nil && mode != generator.ValidSession {
+			errs = append(errs, errors.New("paired_sni requires valid-session mode"))
+		}
+		if _, err := pairedSNISchedule(c.SNI, c.PairedSNI, 1); err != nil {
+			errs = append(errs, err)
+		}
+		if c.Schedule.Repetitions > c.Budget.MaxPackets/2 {
+			errs = append(errs, errors.New("paired attempts exceed packet budget before TCP overhead"))
+		}
+		for _, name := range []string{c.SNI, c.PairedSNI} {
+			if _, err := generator.BuildClientHello(name, [32]byte{}); err != nil {
+				errs = append(errs, fmt.Errorf("invalid paired SNI: %w", err))
+			}
+		}
+		if c.Schedule.InterTrialGapMS < 0 {
+			errs = append(errs, errors.New("paired inter_trial_gap_ms must not be negative"))
+		}
+		if c.Endpoint.Role == RoleTarget {
+			limits := DefaultBudget()
+			if c.Budget.MaxPackets > limits.MaxPackets || c.Budget.MaxBytes > limits.MaxBytes ||
+				c.Budget.MaxRatePPS > limits.MaxRatePPS || c.Budget.MaxDurationS > limits.MaxDurationS {
+				errs = append(errs, errors.New("paired target budget exceeds target limits"))
+			}
+		}
+	}
 	if modeErr == nil && mode == generator.RawExperiment && c.Endpoint.Role == RoleTarget {
 		errs = append(errs, errors.New(
 			"raw-experiment against target is forbidden (docs/SAFETY.md §1)"))
@@ -219,7 +261,7 @@ func (c Config) Validate() error {
 	if c.Capture.Client == "" {
 		errs = append(errs, errors.New("capture.client path is required"))
 	}
-	if c.Capture.Server == "" {
+	if c.Capture.Server == "" && !(c.PairedSNI != "" && c.Endpoint.Role == RoleTarget) {
 		errs = append(errs, errors.New("capture.server path is required"))
 	}
 	if c.RunnerLog == "" {
