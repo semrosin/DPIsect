@@ -84,6 +84,69 @@ func TestWireBudgetCountsBothDirectionsAndRetransmissions(t *testing.T) {
 	}
 }
 
+func TestWireBudgetRateCountsOutgoingOnly(t *testing.T) {
+	t.Parallel()
+
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := testTCPFrame(t, "192.0.2.1", "192.0.2.10", 50000, 443)
+	in := testTCPFrame(t, "192.0.2.10", "192.0.2.1", 443, 50000)
+	now := time.Unix(100, 0)
+	for _, frame := range [][]byte{out, in, in, in} {
+		if err := budget.observe(frame, len(frame), now); err != nil {
+			t.Fatalf("incoming packets must not consume the outbound rate budget: %v", err)
+		}
+	}
+	if budget.packets != 4 || budget.bytes != len(out)+3*len(in) {
+		t.Fatalf("total budget must include both directions: %d packets, %d bytes", budget.packets, budget.bytes)
+	}
+	if err := budget.observe(out, len(out), now.Add(time.Millisecond)); err == nil {
+		t.Fatal("second outbound packet must reach the rate threshold")
+	}
+}
+
+func TestWireBudgetRejectsOutOfOrderInboundFrames(t *testing.T) {
+	t.Parallel()
+
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := testTCPFrame(t, "192.0.2.10", "192.0.2.1", 443, 50000)
+	now := time.Unix(100, 0)
+	if err := budget.observe(in, len(in), now); err != nil {
+		t.Fatal(err)
+	}
+	if err := budget.observe(in, len(in), now.Add(-time.Millisecond)); err == nil {
+		t.Fatal("out-of-order incoming timestamps must stop accounting")
+	}
+}
+
+func TestWireBudgetOutboundRateUsesSlidingSecond(t *testing.T) {
+	t.Parallel()
+
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := testTCPFrame(t, "192.0.2.1", "192.0.2.10", 50000, 443)
+	in := testTCPFrame(t, "192.0.2.10", "192.0.2.1", 443, 50000)
+	now := time.Unix(100, 0)
+	for _, trial := range []struct {
+		frame []byte
+		at    time.Time
+	}{{out, now}, {in, now.Add(time.Millisecond)}, {out, now.Add(time.Second)}} {
+		if err := budget.observe(trial.frame, len(trial.frame), trial.at); err != nil {
+			t.Fatalf("expired outgoing packet should not consume the current second: %v", err)
+		}
+	}
+	if err := budget.observe(out, len(out), now.Add(time.Second+time.Millisecond)); err == nil {
+		t.Fatal("two outgoing packets in the current second must reach the rate threshold")
+	}
+}
+
 func TestWireBudgetStopsOnRateBytesAndIncompleteCapture(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +159,16 @@ func TestWireBudgetStopsOnRateBytesAndIncompleteCapture(t *testing.T) {
 		}
 		if err := budget.observe(frame, len(frame), now); err == nil {
 			t.Fatal("packet reaching byte limit must stop the series")
+		}
+	})
+	t.Run("incoming bytes", func(t *testing.T) {
+		in := testTCPFrame(t, "192.0.2.10", "192.0.2.1", 443, 50000)
+		budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: len(in), MaxRatePPS: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := budget.observe(in, len(in), now); err == nil {
+			t.Fatal("incoming packet reaching byte limit must stop the series")
 		}
 	})
 	t.Run("rate", func(t *testing.T) {
