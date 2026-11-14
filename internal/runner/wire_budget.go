@@ -19,6 +19,7 @@ type wireBudget struct {
 	packets            int
 	bytes              int
 	recent             []time.Time
+	lastObserved       time.Time
 	lastMatching       bool
 	maxFrameLength     int
 	synSeen            map[synKey]int
@@ -77,9 +78,10 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 	b.lastMatching = true
 	b.packets++
 	b.bytes += originalLength
-	if len(b.recent) > 0 && now.Before(b.recent[len(b.recent)-1]) {
+	if !b.lastObserved.IsZero() && now.Before(b.lastObserved) {
 		return fmt.Errorf("wire budget: capture timestamps are out of order")
 	}
+	b.lastObserved = now
 	if b.maxFrameLength > 0 && originalLength > b.maxFrameLength {
 		return fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance; offload may obscure packet counts")
 	}
@@ -104,9 +106,12 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 			keep++
 		}
 	}
-	b.recent = append(b.recent[:keep], now)
+	b.recent = b.recent[:keep]
+	if toTarget && tcp.DstPort == b.port {
+		b.recent = append(b.recent, now)
+	}
 	if b.packets >= wireStopThreshold(b.limits.MaxPackets) || b.bytes >= wireStopThreshold(b.limits.MaxBytes) || len(b.recent) >= wireStopThreshold(b.limits.MaxRatePPS) {
-		return fmt.Errorf("wire budget: observed limit reached (%d packets, %d bytes, %d packets in one second)", b.packets, b.bytes, len(b.recent))
+		return fmt.Errorf("wire budget: observed limit reached (%d packets, %d bytes, %d outgoing packets in one second)", b.packets, b.bytes, len(b.recent))
 	}
 	return nil
 }
