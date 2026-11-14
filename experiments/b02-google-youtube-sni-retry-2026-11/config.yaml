@@ -1,0 +1,24 @@
+question_id: B02
+experiment_id: b02-google-youtube-sni-retry-2026-11
+mode: valid-session
+sni: www.google.com
+paired_sni: www.youtube.com
+paired_timeout_ms: 5000
+endpoint: {role: target, ip: 142.251.155.119, port: 443}
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  max_syn_retransmissions: 1
+  stop_conditions: [first repeated SYN, budget threshold, capture error or drops, abnormal channel behavior, SIGINT]
+schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none}
+capture: {client: artifacts/b02-google-youtube-sni-retry-2026-11/client.pcap}
+runner_log: artifacts/b02-google-youtube-sni-retry-2026-11/runner.log
+classification_rule: |
+  This is a two-connection feasibility pilot on one Google address, not the
+  full B02 address matrix. Record each TCP/TLS outcome, certificate validation,
+  captured packets, actual ClientHello sizes and capture limitations. Different
+  outcomes do not distinguish server behavior from network interference, and
+  the names and generated ClientHellos may have different lengths. Neither TLS
+  handshake alone determines website availability. B02 remains inconclusive.
