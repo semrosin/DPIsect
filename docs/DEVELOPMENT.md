@@ -74,13 +74,13 @@
    `throttling`) в `testdata/` + классификатор; разметка и границы
    применимости — рядом с fixture (`GO_STYLE.md` §6, `H01`).
 9. Первый полный опыт на одном контрольном профиле — с артефактами в
-   `experiments/<experiment_id>/` (`EXPERIMENTS.md` §4).
+   `experiments/<question_id>/<series>/<experiment_id>/` (`EXPERIMENTS.md` §4).
 
 **Критерии выхода** (в скобках — артефакт, подтверждающий выполнение):
 
 - [x] Генератор и клиентский capture работают на управляемом примере.
       Серверный capture и `helper` не обязательны для закрытия этапа.
-      (отчёт `experiments/<experiment_id>/report.md` + PCAP вне git,
+      (отчёт `experiments/<question_id>/<series>/<experiment_id>/report.md` + PCAP вне git,
       `SAFETY.md` §5)
 - [x] Классификатор различает полный набор `H01` на fixture: отсутствие
       вмешательства, `drop`, `rst_injection`, модификация, TLS Alert,
@@ -88,9 +88,9 @@
       как явно отмеченное ограничение, не как «готово».
       (fixtures в `testdata/` + результаты классификации в отчёте)
 - [x] Для одного контрольного профиля сохранён полный набор артефактов
-      в `experiments/<experiment_id>/` (PCAP — вне git, см.
+      в `experiments/<question_id>/<series>/<experiment_id>/` (PCAP — вне git, см.
       `SAFETY.md` §5; шаблон отчёта — `EXPERIMENTS.md` §4).
-      (каталог `experiments/<experiment_id>/` с `report.md` по шаблону)
+      (каталог `experiments/<question_id>/<series>/<experiment_id>/` с `report.md` по шаблону)
 - [x] `ARCHITECTURE.md` заполнен (не заглушка): роли и границы
       компонентов (generator / runner / capture / helper / analyzer)
       зафиксированы. (`docs/ARCHITECTURE.md`)
@@ -106,15 +106,15 @@
 | ID | Имеющиеся данные | Что не установлено |
 | --- | --- | --- |
 | A01 | Независимая контрольная сеть в оформленном опыте отсутствует. | Сопоставление двух сетей и helper; при отсутствии контрольной сети допустим `inconclusive`. |
-| A02 | [Telegram Web](../experiments/a02-telegram-web-2026-11/report.md): локально наблюдались SYN без записанного SYN-ACK. | Причина и точка потери; формальный исход — `inconclusive`. |
+| A02 | [Telegram Web](../experiments/a02/telegram/a02-telegram-web-2026-11/report.md): локально наблюдались SYN без записанного SYN-ACK. | Причина и точка потери; формальный исход — `inconclusive`. |
 | A03 | Нет парных наблюдений RST/FIN на удалённых концах маршрута. | Происхождение RST/FIN или изменение пакета. |
 | A04 | В локальном контроле helper получил ClientHello. | Направление потерь на маршруте к Telegram. |
 | A07 | Реализованы принимающий и отвергающий профили helper. | Сопоставленный опыт на обоих профилях с серверными событиями. |
 | G01 | Системное разрешение вернуло IPv4 Telegram Web. | Сравнение с независимым источником и оценка причин различий. |
 | G02 | В клиентском PCAP одной попытки к Telegram не записан SYN-ACK. | Проверки до/после и причина недоступности; одиночный таймаут не доказывает блокировку IP. |
-| H01 | Шесть синтетических fixtures классифицированы по ожидаемым меткам; результат в [отчёте H01](../experiments/h01-control-profile-2026-11/report.md). | Проверка на разнообразных управляемых сбоях и матрица ошибок. |
+| H01 | Шесть синтетических fixtures классифицированы по ожидаемым меткам; результат в [отчёте H01](../experiments/h01/control/h01-control-profile-2026-11/report.md). | Проверка на разнообразных управляемых сбоях и матрица ошибок. |
 | H02 | Есть код контроллера `netem`; профиль из runner пока не запускается. | Проверка ложных срабатываний при потерях, задержке, reorder и MTU. |
-| H03 | [Локальный контроль](../experiments/h03-capture-retry-2026-11/report.md): плановый ClientHello записан обоими capture на `lo`. | Физическая линия, независимые точки, offload и фактические TCP-поля. |
+| H03 | [Локальный контроль](../experiments/h03/capture/h03-capture-retry-2026-11/report.md): плановый ClientHello записан обоими capture на `lo`. | Физическая линия, независимые точки, offload и фактические TCP-поля. |
 | H04 | Сохранены отдельные пилотные запуски. | Повторяемость с перемешанным порядком и контролями. |
 | H07 | Сохранены конфигурация, план, метаданные, PCAP и итоговые хэши локального контроля. | Полная воспроизводимость внешнего маршрута; `run.json` содержит промежуточный хэш серверного PCAP, итоговый хэш сохранён отдельно. |
 
@@ -155,7 +155,7 @@
 контрольная сеть и helper не являются обязательными условиями перехода.
 
 Пользователь выбрал исследование Telegram; собственного helper нет.
-В ранее сохранённом [опыте](../experiments/a02-telegram-web-2026-11/report.md)
+В ранее сохранённом [опыте](../experiments/a02/telegram/a02-telegram-web-2026-11/report.md)
 для `web.telegram.org` в клиентском PCAP не наблюдался завершённый TCP
 handshake, поэтому реакция на SNI в нём не исследована.
 
@@ -250,8 +250,8 @@ SNI для Telegram, Google / YouTube и X. Данные не устанавли
 **Критерии выхода:**
 
 - [ ] Для каждого обязательного вопроса создан отчёт в
-      `experiments/<experiment_id>/` со статусом `confirmed`, `refuted`
-      или `inconclusive`. (`experiments/<experiment_id>/report.md`,
+      `experiments/<question_id>/<series>/<experiment_id>/` со статусом `confirmed`, `refuted`
+      или `inconclusive`. (`experiments/<question_id>/<series>/<experiment_id>/report.md`,
       `EXPERIMENTS.md` §4)
 - [ ] Как минимум один вопрос имеет статус `confirmed` либо все —
       `refuted`/`inconclusive` с описанной причиной.
@@ -287,7 +287,7 @@ SNI для Telegram, Google / YouTube и X. Данные не устанавли
 **Критерии выхода:**
 
 - [ ] Отчёты по обязательным вопросам созданы.
-      (`experiments/<experiment_id>/report.md`)
+      (`experiments/<question_id>/<series>/<experiment_id>/report.md`)
 - [ ] Различие TCP-сегментов, TLS records и IP-фрагментов зафиксировано
       в выводах (не смешано). (секция `results` отчётов)
 
@@ -309,7 +309,7 @@ SNI для Telegram, Google / YouTube и X. Данные не устанавли
 **Критерии выхода:**
 
 - [ ] Отчёты по обязательным вопросам созданы.
-      (`experiments/<experiment_id>/report.md`)
+      (`experiments/<question_id>/<series>/<experiment_id>/report.md`)
 - [ ] Для каждой пробы подтверждено фактическое поведение endpoint
       (принято / отвергнуто). (секция `actual_wire_validation` +
       `observations` отчётов)
@@ -335,7 +335,7 @@ SNI для Telegram, Google / YouTube и X. Данные не устанавли
       время остаточного эффекта не оцениваются. Если после воспроизводимого
       триггера остаточный эффект не обнаружен, время его исчезновения
       (`E05`) не оценивается: результат — `inconclusive` с причиной.
-      (`experiments/<experiment_id>/report.md`)
+      (`experiments/<question_id>/<series>/<experiment_id>/report.md`)
 - [ ] Для подтверждённого эффекта зафиксирована TTL-граница с оговорками
       (`F01–F04`); при отсутствии индикатора — результат `inconclusive`.
       (отчёты `F01`–`F04`; при отсутствии — явная отметка в отчёте `E04`/`E05`)
@@ -356,7 +356,7 @@ SNI для Telegram, Google / YouTube и X. Данные не устанавли
 
 Префикс обозначает класс вопроса; сами ID и их описания — в
 `RESEARCH_MATRIX.md`. Синтаксис в Git (`feat(b01):`, `Refs: B01`,
-`experiments/<experiment_id>/`) — в `GIT_WORKFLOW.md` §3.
+`experiments/<question_id>/<series>/<experiment_id>/`) — в `GIT_WORKFLOW.md` §3.
 
 | Префикс | Класс вопросов |
 | --- | --- |

@@ -24,7 +24,7 @@
 ветка после отрицательного результата, если результат решено не сливать, или
 ветка с отвергнутой гипотезой), удаляется только по согласованию с
 пользователем. Перед удалением убедитесь, что результат зафиксирован в
-`experiments/<experiment_id>/report.md` на `main` (или в issue/PR) — иначе
+`experiments/<question_id>/<series>/<experiment_id>/report.md` на `main` (или в issue/PR) — иначе
 ссылка на опыт теряется. Самостоятельно удалять чужие ветки запрещено.
 
 ## 2. Имена веток
@@ -47,7 +47,7 @@
 
 Отрицательный результат — часть исследования. Ветка удаляется после
 слияния PR по общему правилу (§1); результат фиксируется в отчёте
-`experiments/<experiment_id>/report.md` и в описании PR. Сохранять
+`experiments/<question_id>/<series>/<experiment_id>/report.md` и в описании PR. Сохранять
 ветку после merge — только по согласованию с пользователем.
 
 ## 3. Коммиты
@@ -124,7 +124,7 @@ chore: add .gitignore
 
 - `experiment_id` = `<question_id>-<slug>-<YYYY-MM>`, например
   `b01-sni-padding-2026-11`; используется в пути
-  `experiments/<experiment_id>/` и в отчёте (`EXPERIMENTS.md` §4);
+  `experiments/<question_id>/<series>/<experiment_id>/` и в отчёте (`EXPERIMENTS.md` §4);
 - ветка = `exp/<question_id>-<slug>` — короткая, удаляется после merge;
 - тег = `exp/<experiment_id>` — постоянный.
 
@@ -176,7 +176,7 @@ Refs: B01
 ```
 
 Для отката экспериментального коммита укажите в теле ссылку на
-`experiments/<experiment_id>/`, если результат уже зафиксирован в отчёте.
+`experiments/<question_id>/<series>/<experiment_id>/`, если результат уже зафиксирован в отчёте.
 
 Не откатывайте force-push’ем уже опубликованную историю (`AGENTS.md`
 §Границы → Никогда).

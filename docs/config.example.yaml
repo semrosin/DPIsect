@@ -1,5 +1,5 @@
 # Example experiment config. Copy to
-# experiments/<experiment_id>/config.yaml and edit.
+# experiments/<question_id>/<series>/<experiment_id>/config.yaml and edit.
 # Schema: internal/runner (Config); report front-matter:
 # docs/EXPERIMENTS.md §4; safety limits: docs/SAFETY.md §3.
 

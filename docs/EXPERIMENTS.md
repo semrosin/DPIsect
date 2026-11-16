@@ -50,7 +50,7 @@ reproducibility — и результат helper **не** гарантирует
 - [ ] План пакетов (planned wire packets): логические байты, TCP
       split offsets, TLS record layout, TTL/SEQ/ACK/checksum — что
       именно планируется отправить; план сохранён в
-      `experiments/<experiment_id>/plan.yaml` до отправки первого
+      `experiments/<question_id>/<series>/<experiment_id>/plan.yaml` до отправки первого
       пакета.
 - [ ] Seed для любого случайного выбора; зафиксирован.
 - [ ] Для TTL-локализации: план сравнения триггера и контроля при
@@ -87,7 +87,7 @@ reproducibility — и результат helper **не** гарантирует
 
 ## 4. Шаблон отчёта
 
-Обязательный минимум для `experiments/<experiment_id>/report.md`
+Обязательный минимум для `experiments/<question_id>/<series>/<experiment_id>/report.md`
 (YAML front-matter + секции).
 
 `experiment_id` = `<question_id>-<slug>-<YYYY-MM>`, например
@@ -153,7 +153,7 @@ artifacts:
 
 ## 5. Артефакты и хранение
 
-- В git — план, отчёт и метаданные: `experiments/<experiment_id>/`.
+- В git — план, отчёт и метаданные: `experiments/<question_id>/<series>/<experiment_id>/`.
 - Вне git — сырые PCAP и логи: `artifacts/<experiment_id>/`
   (в `.gitignore`, каталог `0700`, файлы `0600`) или внешнее
   хранилище. В отчёте — фактический путь и `sha256` каждого файла.

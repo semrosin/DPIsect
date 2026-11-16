@@ -10,7 +10,7 @@ import (
 )
 
 // PlanFile is the persisted packet plan
-// (experiments/<experiment_id>/plan.yaml), fixed before the first
+// (experiments/<question_id>/<series>/<experiment_id>/plan.yaml), fixed before the first
 // packet is sent (docs/ARCHITECTURE.md §4, docs/EXPERIMENTS.md §2).
 type PlanFile struct {
 	ExperimentID string                        `yaml:"experiment_id"`

@@ -154,7 +154,7 @@ Baseline: [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments),
 Секреты и конфигурация:
 
 - Не хранить в коде и в git: ключи, `SSLKEYLOGFILE`, токены.
-- Конфиги экспериментов — в `experiments/<experiment_id>/` или в `docs/`
+- Конфиги экспериментов — в `experiments/<question_id>/<series>/<experiment_id>/` или в `docs/`
   (если это шаблон, а не результат); шаблон — `docs/config.example.yaml`.
 - `*.pcap*`, `*.key`, `SSLKEYLOGFILE` — в `.gitignore`.
 

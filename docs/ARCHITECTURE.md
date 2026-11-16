@@ -30,11 +30,11 @@ config.yaml
   → capture ×2         (client PCAP + server PCAP → artifacts/)
   → observations       (PCAP, dns_log, runner_log, helper_log)
   → dpi-analyze        (измерения + классификация причин H01)
-  → run.json           (experiments/<experiment_id>/, пишет runner)
-  → report.md          (experiments/<experiment_id>/, оператор/агент)
+  → run.json           (experiments/<question_id>/<series>/<experiment_id>/, пишет runner)
+  → report.md          (experiments/<question_id>/<series>/<experiment_id>/, оператор/агент)
 ```
 
-`plan.yaml` фиксируется в `experiments/<experiment_id>/` до отправки
+`plan.yaml` фиксируется в `experiments/<question_id>/<series>/<experiment_id>/` до отправки
 первого пакета; сверка planned vs actual — в измерениях analyzer
 (`EXPERIMENTS.md` §3). Поля отчёта — `EXPERIMENTS.md` §4; семантика
 исходов и автор вердикта — `EXPERIMENTS.md` §7.
@@ -99,7 +99,7 @@ ClientHello каждой TLS-сессии. Сообщения после нег�
 - `internal/` — все внутренние пакеты, включая `lab`, `dnsprobe`,
   `sender`.
 - `testdata/` — размеченные fixtures с известными причинами.
-- `experiments/<experiment_id>/` — в git: `config.yaml`, `plan.yaml`,
+- `experiments/<question_id>/<series>/<experiment_id>/` — в git: `config.yaml`, `plan.yaml`,
   `run.json`, `report.md`; при включённом preflight — также
   `dns_log.yaml`.
 - `artifacts/` — сырые PCAP и логи (вне git; `SAFETY.md` §5).

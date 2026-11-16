@@ -26,7 +26,7 @@ const (
 var ErrNotImplemented = errors.New("run not implemented yet (stage 1, docs/DEVELOPMENT.md)")
 
 // Config is the experiment run configuration loaded from
-// experiments/<experiment_id>/config.yaml. The schema is mirrored by
+// experiments/<question_id>/<series>/<experiment_id>/config.yaml. The schema is mirrored by
 // docs/config.example.yaml; report front-matter — docs/EXPERIMENTS.md §4.
 type Config struct {
 	QuestionID   string `yaml:"question_id"`

@@ -8,7 +8,7 @@ import (
 )
 
 // RunRecord is the machine-readable run metadata written to
-// experiments/<experiment_id>/run.json (H07; docs/ARCHITECTURE.md §4).
+// experiments/<question_id>/<series>/<experiment_id>/run.json (H07; docs/ARCHITECTURE.md §4).
 // Time fields are RFC3339 in UTC.
 type RunRecord struct {
 	ExperimentID       string            `json:"experiment_id"`
