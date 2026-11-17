@@ -4,6 +4,7 @@ package runner
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/google/gopacket/afpacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcapgo"
+	"golang.org/x/net/bpf"
+	"golang.org/x/sys/unix"
 )
 
 type afpacketWireSource struct {
@@ -31,6 +34,26 @@ func newAFPacketWireSource(iface, path string) (*afpacketWireSource, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("wire monitor: open interface: %w", err)
+	}
+	ifc, err := net.InterfaceByName(iface)
+	if err != nil {
+		p.Close()
+		return nil, fmt.Errorf("wire monitor: inspect interface: %w", err)
+	}
+	if ifc.Flags&net.FlagLoopback != 0 {
+		filter, err := bpf.Assemble([]bpf.Instruction{
+			bpf.LoadExtension{Num: bpf.ExtType},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.PACKET_OUTGOING, SkipFalse: 1},
+			bpf.RetConstant{Val: 0},
+			bpf.RetConstant{Val: 65535},
+		})
+		if err == nil {
+			err = p.SetBPF(filter)
+		}
+		if err != nil {
+			p.Close()
+			return nil, fmt.Errorf("wire monitor: filter loopback duplicates: %w", err)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		p.Close()
