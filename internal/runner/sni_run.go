@@ -108,6 +108,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	logger := slog.New(slog.NewJSONHandler(logFile, nil))
 	source, err := open(opts.CaptureIface, cfg.Capture.Client)
 	if err != nil {
+		logger.Error("capture failed to start", "event", "capture_start_failed", "error", err.Error())
 		return fmt.Errorf("start capture: %w", err)
 	}
 	addr := net.JoinHostPort(cfg.Endpoint.IP, strconv.Itoa(cfg.Endpoint.Port))

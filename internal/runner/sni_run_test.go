@@ -154,6 +154,37 @@ func TestSNIComparisonLeavesNoArtifactsAfterPreflightFailure(t *testing.T) {
 	}
 }
 
+func TestSNIComparisonLogsCaptureStartFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := runConfigYAML("127.0.0.1", 443, 1, 100, dir) + "paired_sni: web.telegram.org\n"
+	configPath := writeRunConfig(t, dir, content)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Budget.StopConditions = []string{"SIGINT"}
+	maxRetries := 1
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
+	open := func(_, _ string) (pairWireSource, error) {
+		return nil, errors.New("no permission")
+	}
+	err = runObservedSeries(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open)
+	if err == nil || !strings.Contains(err.Error(), "start capture") {
+		t.Fatalf("error = %v, want a capture start failure", err)
+	}
+	logData, readErr := os.ReadFile(filepath.Join(dir, "runner.log"))
+	if readErr != nil || !strings.Contains(string(logData), "capture_start_failed") {
+		t.Errorf("runner log does not record the failure: %q, %v", logData, readErr)
+	}
+	for _, name := range []string{"run.json", "sni-observations.json"} {
+		if _, statErr := os.Stat(filepath.Join(dir, name)); !errors.Is(statErr, os.ErrNotExist) {
+			t.Errorf("%s must not be created after a capture start failure", name)
+		}
+	}
+}
+
 func TestSNIComparisonRequiresPlanMetadata(t *testing.T) {
 	t.Parallel()
 
