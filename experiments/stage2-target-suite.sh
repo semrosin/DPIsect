@@ -170,9 +170,10 @@ for i in "${!experiments[@]}"; do
     exit 1
   fi
   install -d -m 0700 "artifacts/$id"
-  printf 'confirmed_by=%s confirmed_utc=%s series=%s target=%s\n' \
-    "${SUDO_USER:-${USER:-unknown}}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$id" "$target" \
-    >> "artifacts/$id/confirmations.log"
+  ( umask 077
+    printf 'confirmed_by=%s confirmed_utc=%s series=%s target=%s\n' \
+      "${SUDO_USER:-${USER:-unknown}}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$id" "$target" \
+      >> "artifacts/$id/confirmations.log" )
   printf '\nSeries %s (%s/%s)\n' "$id" "$((i+1))" "${#experiments[@]}"
   status=0
   GODEBUG= "$prober" -config "$experiment/config.yaml" -capture-iface "$iface" -operator "$operator" || status=$?
