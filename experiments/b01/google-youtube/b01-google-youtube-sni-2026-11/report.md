@@ -1,7 +1,7 @@
 ---
 question_id: B01
 experiment_id: b01-google-youtube-sni-2026-11
-status: planned
+status: inconclusive
 hypothesis: "На одном IPv4 исходы TLS с именами Google и YouTube могут различаться."
 alternative_hypotheses: [поведение сервера или сертификата, потери или фильтрация, состояние сети, особенности WSL2 и захвата]
 mode: valid-session
@@ -12,15 +12,15 @@ treatment: {sni: www.youtube.com, changed_factor: "имя SNI при равно�
 invariants: [один IPv4 и порт, TLS 1.2 с проверкой сертификата, отдельные TCP-соединения, одинаковая пауза после TCP, одинаковые лимиты]
 budget: {max_packets: 100, max_bytes: 102400, max_rate_pps: 10, max_duration_s: 60, max_syn_retransmissions: 1, stop_conditions: [первый повторный SYN, повтор исходящих данных или FIN, лимит, ошибка или потери захвата, аномалия, SIGINT]}
 planned_wire_packets: Runner фиксирует полные байты ClientHello и параметры обоих вариантов до подключения; TCP-сегментацию и повторы выбирает ядро.
-actual_wire_validation: null
+actual_wire_validation: "Оба ClientHello — 260 байт; контроль завершил TLS, исследуемый ClientHello повторился без наблюдаемого ответа."
 offload_and_nat: WSL2 и NAT ограничивают выводы; скрипт сохраняет и восстанавливает исходные настройки offload.
 route_metadata: Скрипт проверяет маршрут до запуска и выводит его пользователю.
 schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none, client_hello_delay_ms: 1100, close_delay_ms: 1100}
 observations: {client_pcap: artifacts/b01-google-youtube-sni-2026-11/client.pcap, server_pcap: null, helper_log: null, runner_log: artifacts/b01-google-youtube-sni-2026-11/runner.log}
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
-results: {observation: null, compatible_hypotheses: [], excluded_hypotheses: [], inconclusive_reason: null}
-reproduce: {tool_commit: null, dependency_versions: null, config_file: experiments/b01/google-youtube/b01-google-youtube-sni-2026-11/config.yaml, date_utc: null, operator: null, lab_config_id: null, timestamps_utc: null}
-artifacts: {pcap_client: null, pcap_server: null}
+results: {observation: "Google завершил TLS; YouTube ClientHello повторился без наблюдаемого ответа.", compatible_hypotheses: [сетевое вмешательство, поведение сервера, потеря пакетов], excluded_hypotheses: [], inconclusive_reason: "Одна пара без серверного наблюдения не устанавливает причину различия или принятие YouTube сервером."}
+reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b01/google-youtube/b01-google-youtube-sni-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
+artifacts: {pcap_client: {sha256: f8b199952c1faafd1f6b6b991c73134b296a9259ba9250728412a684c6b483c5}, pcap_server: null}
 ---
 
 ## План и ограничения
@@ -48,4 +48,17 @@ DNS пользователя вернул этот адрес для `www.google
 текущая принадлежность DNS-ответу не проверяется. До запуска проверить
 `docs/DO_NOT_SCAN.md`; пока его нет, серия требует подтверждения пользователя.
 Канал сообщения об уязвимости — [Google Bug Hunters](https://bughunters.google.com/report).
-Сырые PCAP и журналы остаются вне Git. Результатов пока нет.
+Сырые PCAP и журналы остаются вне Git.
+
+## Update 2026-11-17 14:24 UTC
+
+Статус `planned` → `inconclusive`. Контроль `www.google.com` завершил TLS 1.2
+с проверкой сертификата. На том же IP TCP для `www.youtube.com` установился,
+после ClientHello длиной 260 байт ACK или ответ в захвате не наблюдался;
+примерно через 385 мс ClientHello повторился и монитор остановил серию.
+Одной пары и клиентского захвата недостаточно для установления причины;
+принятие YouTube этим сервером отдельно не проверено.
+
+Наблюдено 22 кадра, 5080 байт Ethernet, потерь захвата нет. Маршрут:
+`142.251.155.119 via 172.26.0.1 dev eth0 src 172.26.1.205`. Пользователь
+сообщил о восстановлении исходных offload. Хеши артефактов — в `run.json`.
