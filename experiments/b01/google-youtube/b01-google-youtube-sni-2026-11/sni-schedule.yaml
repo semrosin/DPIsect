@@ -12,4 +12,5 @@ variants:
 inter_trial_gap_ms: 3000
 trial_timeout_ms: 5000
 client_hello_delay_ms: 1100
+close_delay_ms: 1100
 execution_ready: false

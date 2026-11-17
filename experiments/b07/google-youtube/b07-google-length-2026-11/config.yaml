@@ -5,6 +5,7 @@ sni: www.google.com
 paired_sni: www.google.com
 paired_timeout_ms: 5000
 paired_client_hello_delay_ms: 1100
+paired_close_delay_ms: 1100
 paired_hello:
   control: {record_length: 260, sni_offset: 110, ignored_data: neutral}
   treatment: {record_length: 300, sni_offset: 110, ignored_data: neutral}

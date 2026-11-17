@@ -2,20 +2,20 @@
 set -Eeuo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
-prober=artifacts/stage2-utls/dpi-prober
+prober=artifacts/stage2-close-delay/dpi-prober
 target=142.251.155.119
 iface=eth0
 experiments=(
-  experiments/b07/google-youtube/b07-google-offset-2026-11
+  experiments/b07/google-youtube/b07-google-offset-paced-2026-11
   experiments/b07/google-youtube/b07-google-length-2026-11
   experiments/b04/google-youtube/b04-google-youtube-field-2026-11
   experiments/b01/google-youtube/b01-google-youtube-sni-2026-11
 )
 hashes=(
-  4f2a3c89c028bededea5e155794639a33c5199bd5fb8856e0154ee3cb8bd01f0
-  06ce8bd781e4e521f4b25ef572a477ce5b9d0e42bf8a307d245b993e35bc341b
-  31508435f7e4d382184442da1761a42798d925841d77d1d3cce1b59700eb4d7d
-  3b17e0da2a8daaf8558fd2d543f58bc405b5f294a3ad3cafb13cc5f984d470dc
+  d75b1b2d42bf43e1936112ad022fd96ff9349931cb673184fb7cf40b8529db29
+  2083ee4dccd2803c13a3d4dcee82db96c355271011a2709044fa4cddabef8d99
+  00cc7c297c14d206dfeb5f3ee926a9c33bf6f7eda8605c629db82bda4cc29a32
+  08ec66314a63b4912957a15b852024a1520f576ddfd72108f1b3ba8da4798c90
 )
 
 if [[ -e docs/DO_NOT_SCAN.md ]]; then
@@ -26,7 +26,7 @@ if [[ ! -x "$prober" || -n "$(getcap "$prober")" ]]; then
   printf '%s\n' 'Prepared prober is missing or already has capabilities.' >&2
   exit 1
 fi
-if ! printf '%s  %s\n' 6835e26b8a4673e5709a12ee6635a072da856ffb4d1b3f3f53fc20a610b3946d "$prober" | sha256sum -c --status; then
+if ! printf '%s  %s\n' 49531f3b83b0d63fdad16af79e12389d39d30667702971377092cef0a954cd58 "$prober" | sha256sum -c --status; then
   printf '%s\n' 'Prober differs from the prepared binary; no probe started.' >&2
   exit 1
 fi

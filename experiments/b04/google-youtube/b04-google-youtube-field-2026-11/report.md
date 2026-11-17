@@ -15,7 +15,7 @@ planned_wire_packets: Runner фиксирует полные байты ClientHe
 actual_wire_validation: null
 offload_and_nat: WSL2 и NAT ограничивают выводы; скрипт сохраняет и восстанавливает исходные настройки offload.
 route_metadata: Скрипт проверяет маршрут до запуска и выводит его пользователю.
-schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none, client_hello_delay_ms: 1100}
+schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none, client_hello_delay_ms: 1100, close_delay_ms: 1100}
 observations: {client_pcap: artifacts/b04-google-youtube-field-2026-11/client.pcap, server_pcap: null, helper_log: null, runner_log: artifacts/b04-google-youtube-field-2026-11/runner.log}
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: null, compatible_hypotheses: [], excluded_hypotheses: [], inconclusive_reason: null}
@@ -30,6 +30,9 @@ artifacts: {pcap_client: null, pcap_server: null}
 от начала TLS-записи, а не TCP-пакета. Одинаковая пауза 1,1 секунды после
 TCP-handshake меняет тайминг; случайные поля TLS различаются. Возможность
 сервера принять оба имени и частные расширения заранее не установлена.
+
+После успешного TLS соединение удерживается открытым 1,1 секунды; монитор
+остаётся активным. Пауза не гарантирует соблюдение лимита при повторах.
 
 Каждый опыт — одна пара с паузой 3 секунды между попытками, без HTTP.
 Между сериями предусмотрено 3 секунды. Общий скрипт прекращает пакет
