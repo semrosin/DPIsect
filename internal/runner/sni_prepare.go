@@ -31,8 +31,9 @@ func PrepareSNIComparison(cfg Config, configPath string) error {
 		GapMS        int      `yaml:"inter_trial_gap_ms"`
 		TimeoutMS    int      `yaml:"trial_timeout_ms"`
 		DelayMS      int      `yaml:"client_hello_delay_ms,omitempty"`
+		CloseDelayMS int      `yaml:"close_delay_ms,omitempty"`
 		Ready        bool     `yaml:"execution_ready"`
-	}{ExperimentID: cfg.ExperimentID, Endpoint: cfg.Endpoint, Names: names, GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, DelayMS: cfg.PairedClientHelloDelayMS}
+	}{ExperimentID: cfg.ExperimentID, Endpoint: cfg.Endpoint, Names: names, GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, DelayMS: cfg.PairedClientHelloDelayMS, CloseDelayMS: cfg.PairedCloseDelayMS}
 	if cfg.PairedHello != nil {
 		for i := range names {
 			plan.Variants = append(plan.Variants, pairedVariant(i))

@@ -41,6 +41,8 @@ type Config struct {
 	PairedTimeoutMS int `yaml:"paired_timeout_ms,omitempty"`
 	// PairedClientHelloDelayMS delays TLS after TCP connects in paired runs.
 	PairedClientHelloDelayMS int `yaml:"paired_client_hello_delay_ms,omitempty"`
+	// PairedCloseDelayMS holds successful connections before closing.
+	PairedCloseDelayMS int `yaml:"paired_close_delay_ms,omitempty"`
 	// PairedHello enables independently shaped ClientHellos for B04/B07.
 	PairedHello *PairedHello `yaml:"paired_hello,omitempty"`
 	// TCPOnly runs ordinary TCP connectivity controls without application data.
@@ -254,6 +256,9 @@ func (c Config) Validate() error {
 	if c.PairedSNI == "" && c.PairedClientHelloDelayMS != 0 {
 		errs = append(errs, errors.New("paired_client_hello_delay_ms requires paired_sni"))
 	}
+	if c.PairedSNI == "" && c.PairedCloseDelayMS != 0 {
+		errs = append(errs, errors.New("paired_close_delay_ms requires paired_sni"))
+	}
 	if c.PairedHello != nil {
 		if c.PairedSNI == "" || c.TCPOnly {
 			errs = append(errs, errors.New("paired_hello requires paired_sni"))
@@ -279,6 +284,9 @@ func (c Config) Validate() error {
 		}
 		if c.PairedClientHelloDelayMS < 0 || c.PairedClientHelloDelayMS >= c.PairedTimeoutMS {
 			errs = append(errs, errors.New("paired_client_hello_delay_ms must be nonnegative and shorter than paired_timeout_ms"))
+		}
+		if c.PairedCloseDelayMS < 0 || int64(c.PairedCloseDelayMS)+int64(c.PairedClientHelloDelayMS) >= int64(c.PairedTimeoutMS) {
+			errs = append(errs, errors.New("paired_close_delay_ms must be nonnegative and both delays must fit within paired_timeout_ms"))
 		}
 		if modeErr == nil && mode != generator.ValidSession {
 			errs = append(errs, errors.New("paired_sni requires valid-session mode"))

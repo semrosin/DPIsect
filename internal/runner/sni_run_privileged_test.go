@@ -130,7 +130,8 @@ func TestB07ShapedPairCompletesUnderRateLimitLoopback(t *testing.T) {
 		p := sessions[index]
 		index++
 		defer p.Close()
-		return p.StartAfter(ctx, addr, 1100*time.Millisecond)
+		result := p.StartAfter(ctx, addr, 1100*time.Millisecond)
+		return waitBeforeClose(ctx, result, 1100*time.Millisecond)
 	}
 	trials, err := runMonitoredSNITrials(ctx, server.Listener.Addr().String(), []string{sni, sni}, 5*time.Second, 3*time.Second, probe, source, budget)
 	if err != nil {

@@ -29,6 +29,7 @@ type sniWirePlan struct {
 	GapMS              int            `yaml:"inter_trial_gap_ms"`
 	TimeoutMS          int            `yaml:"trial_timeout_ms"`
 	ClientHelloDelayMS int            `yaml:"client_hello_delay_ms,omitempty"`
+	CloseDelayMS       int            `yaml:"close_delay_ms,omitempty"`
 	StateReset         string         `yaml:"state_reset"`
 	Budget             Budget         `yaml:"budget"`
 	Rule               string         `yaml:"classification_rule"`
@@ -77,7 +78,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	}
 	plan := sniWirePlan{
 		ExperimentID: cfg.ExperimentID, QuestionID: cfg.QuestionID, Mode: cfg.Mode, Endpoint: cfg.Endpoint,
-		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, ClientHelloDelayMS: cfg.PairedClientHelloDelayMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
+		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, ClientHelloDelayMS: cfg.PairedClientHelloDelayMS, CloseDelayMS: cfg.PairedCloseDelayMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
 		Rule:      cfg.ClassificationRule,
 		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final completed trial if the series is not canceled", postTrialCaptureWindow),
 	}

@@ -129,7 +129,8 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		session := sessions[index]
 		index++
 		defer session.Close()
-		return session.StartAfter(ctx, addr, time.Duration(cfg.PairedClientHelloDelayMS)*time.Millisecond)
+		result := session.StartAfter(ctx, addr, time.Duration(cfg.PairedClientHelloDelayMS)*time.Millisecond)
+		return waitBeforeClose(ctx, result, time.Duration(cfg.PairedCloseDelayMS)*time.Millisecond)
 	}
 	logger.Info("series started", "event", "series_start", "experiment", cfg.ExperimentID, "tcp_only", cfg.TCPOnly)
 	timeoutMS := cfg.PairedTimeoutMS
@@ -190,4 +191,19 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		return errors.Join(runErr, fmt.Errorf("close run metadata: %w", err))
 	}
 	return runErr
+}
+
+// waitBeforeClose keeps a completed session open while the monitor remains active.
+func waitBeforeClose(ctx context.Context, result sender.TLSObservation, delay time.Duration) sender.TLSObservation {
+	if result.Stage != "complete" || delay <= 0 {
+		return result
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return result
+	case <-ctx.Done():
+		return sender.TLSObservation{Stage: "tls", Error: ctx.Err().Error()}
+	}
 }

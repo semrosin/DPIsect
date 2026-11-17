@@ -14,7 +14,7 @@ func TestPrepareSNIComparisonWritesOfflineSchedule(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	content := runConfigYAML("192.0.2.10", 443, 2, 100, dir) + "paired_sni: web.telegram.org\npaired_client_hello_delay_ms: 1100\n"
+	content := runConfigYAML("192.0.2.10", 443, 2, 100, dir) + "paired_sni: web.telegram.org\npaired_client_hello_delay_ms: 1100\npaired_close_delay_ms: 1100\n"
 	configPath := writeRunConfig(t, dir, content)
 	cfg, err := Load(configPath)
 	if err != nil {
@@ -28,15 +28,19 @@ func TestPrepareSNIComparisonWritesOfflineSchedule(t *testing.T) {
 		t.Fatalf("read schedule: %v", err)
 	}
 	var got struct {
-		Endpoint Endpoint `yaml:"endpoint"`
-		Names    []string `yaml:"sni_schedule"`
-		DelayMS  int      `yaml:"client_hello_delay_ms"`
+		Endpoint     Endpoint `yaml:"endpoint"`
+		Names        []string `yaml:"sni_schedule"`
+		DelayMS      int      `yaml:"client_hello_delay_ms"`
+		CloseDelayMS int      `yaml:"close_delay_ms"`
 	}
 	if err := yaml.Unmarshal(data, &got); err != nil {
 		t.Fatalf("decode schedule: %v", err)
 	}
 	if got.Endpoint.IP != "192.0.2.10" || got.Endpoint.Port != 443 {
 		t.Errorf("endpoint = %+v", got.Endpoint)
+	}
+	if got.CloseDelayMS != 1100 {
+		t.Fatalf("close delay = %d", got.CloseDelayMS)
 	}
 	if got.DelayMS != 1100 {
 		t.Fatalf("delay = %d, want 1100", got.DelayMS)
@@ -97,6 +101,8 @@ func TestPairedConfigRejectsInvalidInputs(t *testing.T) {
 		{"unsupported state reset", func(c *Config) { c.Schedule.StateReset = "flush" }},
 		{"IPv6 endpoint", func(c *Config) { c.Endpoint.IP = "2001:db8::1" }},
 		{"timeout exceeds budget", func(c *Config) { c.PairedTimeoutMS = 61000 }},
+		{"negative close delay", func(c *Config) { c.PairedCloseDelayMS = -1 }},
+		{"delays exceed timeout", func(c *Config) { c.PairedCloseDelayMS = c.PairedTimeoutMS }},
 		{"negative ClientHello delay", func(c *Config) { c.PairedClientHelloDelayMS = -1 }},
 		{"ClientHello delay reaches timeout", func(c *Config) { c.PairedClientHelloDelayMS = c.PairedTimeoutMS }},
 		{"invalid SYN retry limit", func(c *Config) { n := 0; c.Budget.MaxSYNRetransmissions = &n }},
