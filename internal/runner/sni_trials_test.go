@@ -55,3 +55,23 @@ func TestObserveSNITrialsStopsOnCancellation(t *testing.T) {
 		t.Fatalf("trials = %d, error = %v; want one result and cancellation", len(got), err)
 	}
 }
+
+func TestWaitAfterTrialsSkipsNearDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := waitAfterTrials(ctx); err != nil {
+		t.Fatalf("near-deadline wait: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("near-deadline wait took %v", elapsed)
+	}
+
+	cancelled, cancelNow := context.WithCancel(context.Background())
+	cancelNow()
+	if err := waitAfterTrials(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait error = %v", err)
+	}
+}

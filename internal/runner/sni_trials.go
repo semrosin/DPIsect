@@ -70,9 +70,7 @@ func runMonitoredSNITrials(ctx context.Context, addr string, names []string, tim
 	}()
 	trials, trialErr := observeSNITrials(ctx, addr, names, timeout, gap, probe)
 	if trialErr == nil {
-		// Give the capture reader a bounded opportunity to collect the
-		// final connection teardown before stopping it.
-		trialErr = sleepCtx(ctx, postTrialCaptureWindow)
+		trialErr = waitAfterTrials(ctx)
 	}
 	cancel()
 	monitorErr := <-monitorDone
@@ -80,4 +78,14 @@ func runMonitoredSNITrials(ctx context.Context, addr string, names []string, tim
 		return trials, monitorErr
 	}
 	return trials, trialErr
+}
+
+// waitAfterTrials gives the capture reader a bounded opportunity to collect
+// the final connection teardown. The wait is skipped when the series deadline
+// is too close, so a normal deadline does not look like a trial failure.
+func waitAfterTrials(ctx context.Context) error {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= postTrialCaptureWindow+250*time.Millisecond {
+		return nil
+	}
+	return sleepCtx(ctx, postTrialCaptureWindow)
 }
