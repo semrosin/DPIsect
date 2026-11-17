@@ -125,6 +125,32 @@ func TestMonitorWireCancelsAndRecordsFINRetransmission(t *testing.T) {
 	}
 }
 
+func TestMonitoredTrialsCatchFINRetryAfterLastProbe(t *testing.T) {
+	t.Parallel()
+
+	fin := testTCPDataFrame(t, 50000, 100, nil, true)
+	source := channelWireSource{frames: make(chan []byte, 2)}
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var timer *time.Timer
+	probe := func(context.Context, string, string) sender.TLSObservation {
+		source.frames <- fin
+		timer = time.AfterFunc(400*time.Millisecond, func() { source.frames <- fin })
+		return sender.TLSObservation{Stage: "complete"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = runMonitoredSNITrials(ctx, "192.0.2.10:443", []string{"example.com"}, time.Second, 0, probe, source, budget)
+	if timer != nil {
+		timer.Stop()
+	}
+	if err == nil || !strings.Contains(err.Error(), "retransmission") {
+		t.Fatalf("late FIN retry error = %v", err)
+	}
+}
+
 type channelWireSource struct {
 	frames chan []byte
 }
