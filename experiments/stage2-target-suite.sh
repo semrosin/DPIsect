@@ -17,6 +17,13 @@ hashes=(
   00cc7c297c14d206dfeb5f3ee926a9c33bf6f7eda8605c629db82bda4cc29a32
   08ec66314a63b4912957a15b852024a1520f576ddfd72108f1b3ba8da4798c90
 )
+if [[ $# -eq 1 && $1 == --b01-only ]]; then
+  experiments=("${experiments[3]}")
+  hashes=("${hashes[3]}")
+elif [[ $# -ne 0 ]]; then
+  printf 'Usage: bash %s [--b01-only]\n' "$0" >&2
+  exit 1
+fi
 
 if [[ -e docs/DO_NOT_SCAN.md ]]; then
   printf '%s\n' 'Do Not Scan list exists; review it and prepare a new approved plan.' >&2
@@ -124,7 +131,7 @@ for i in "${!experiments[@]}"; do
     printf '%s\n' 'Do Not Scan list appeared; remaining series will not run.' >&2
     exit 1
   fi
-  printf '\nSeries %s (%s/4)\n' "$id" "$((i+1))"
+  printf '\nSeries %s (%s/%s)\n' "$id" "$((i+1))" "${#experiments[@]}"
   status=0
   GODEBUG= "$prober" -config "$experiment/config.yaml" -capture-iface "$iface" -operator "${USER:-unknown}" || status=$?
   if [[ -f "$observation" ]]; then cat "$observation"; fi
