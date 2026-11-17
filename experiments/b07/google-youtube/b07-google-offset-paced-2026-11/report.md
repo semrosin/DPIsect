@@ -1,7 +1,7 @@
 ---
 question_id: B07
 experiment_id: b07-google-offset-paced-2026-11
-status: planned
+status: inconclusive
 hypothesis: "Исход TLS может зависеть от положения SNI при одинаковой длине ClientHello."
 alternative_hypotheses: [поведение сервера или сертификата, потери или фильтрация, состояние сети, особенности WSL2 и захвата]
 mode: valid-session
@@ -12,15 +12,15 @@ treatment: {sni: www.google.com, changed_factor: "положение SNI при 
 invariants: [один IPv4 и порт, TLS 1.2 с проверкой сертификата, отдельные TCP-соединения, одинаковая пауза после TCP, одинаковые лимиты]
 budget: {max_packets: 100, max_bytes: 102400, max_rate_pps: 10, max_duration_s: 60, max_syn_retransmissions: 1, stop_conditions: [первый повторный SYN, повтор исходящих данных или FIN, лимит, ошибка или потери захвата, аномалия, SIGINT]}
 planned_wire_packets: Runner фиксирует полные байты ClientHello и параметры обоих вариантов до подключения; TCP-сегментацию и повторы выбирает ядро.
-actual_wire_validation: null
+actual_wire_validation: "Оба смещения 110 и 130 байт: TLS 1.2 завершился."
 offload_and_nat: WSL2 и NAT ограничивают выводы; скрипт сохраняет и восстанавливает исходные настройки offload.
 route_metadata: Скрипт проверяет маршрут до запуска и выводит его пользователю.
 schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none, client_hello_delay_ms: 1100, close_delay_ms: 1100}
 observations: {client_pcap: artifacts/b07-google-offset-paced-2026-11/client.pcap, server_pcap: null, helper_log: null, runner_log: artifacts/b07-google-offset-paced-2026-11/runner.log}
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
-results: {observation: null, compatible_hypotheses: [], excluded_hypotheses: [], inconclusive_reason: null}
-reproduce: {tool_commit: null, dependency_versions: null, config_file: experiments/b07/google-youtube/b07-google-offset-paced-2026-11/config.yaml, date_utc: null, operator: null, lab_config_id: null, timestamps_utc: null}
-artifacts: {pcap_client: null, pcap_server: null}
+results: {observation: "Оба смещения 110 и 130 байт: TLS 1.2 завершился.", compatible_hypotheses: [эффект есть, эффекта нет], excluded_hypotheses: [], inconclusive_reason: "Одна пара не устанавливает воспроизводимый эффект или отсутствие эффекта."}
+reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b07/google-youtube/b07-google-offset-paced-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
+artifacts: {pcap_client: {sha256: 6b671f3cc113a5ed6d94bca281d36dff4f90b96716eaae9acc6956fe75a6e3c1}, pcap_server: null}
 ---
 
 ## План и ограничения
@@ -48,4 +48,10 @@ DNS пользователя вернул этот адрес для `www.google
 текущая принадлежность DNS-ответу не проверяется. До запуска проверить
 `docs/DO_NOT_SCAN.md`; пока его нет, серия требует подтверждения пользователя.
 Канал сообщения об уязвимости — [Google Bug Hunters](https://bughunters.google.com/report).
-Сырые PCAP и журналы остаются вне Git. Результатов пока нет.
+Сырые PCAP и журналы остаются вне Git.
+
+## Update 2026-11-17 12:11 UTC
+
+Статус `planned` → `inconclusive`. Для контрольного и исследуемого смещения успешно завершился TLS 1.2 с проверкой сертификата. Длина обоих ClientHello — 260 байт. В пределах одного парного опыта различия в завершении TLS не наблюдалось.
+
+Наблюдено кадров: 34, байт Ethernet: 8427, потерь захвата: 0. Маршрут: `142.251.155.119 via 172.26.0.1 dev eth0 src 172.26.1.205`. Пользователь сообщил о восстановлении исходных настроек offload. Хеши PCAP, журнала и наблюдений — в `run.json`; сырые артефакты вне Git.
