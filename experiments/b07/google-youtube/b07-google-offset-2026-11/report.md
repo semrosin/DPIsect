@@ -20,7 +20,7 @@ observations: {client_pcap: artifacts/b07-google-offset-2026-11/client.pcap, ser
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: "Контрольный TLS 1.2 завершился; серия остановлена на 9 исходящих пакетах за секунду.", compatible_hypotheses: [влияние положения SNI, отсутствие влияния положения SNI], excluded_hypotheses: [], inconclusive_reason: "Второй вариант не запускался; сравнение отсутствует."}
 reproduce: {tool_commit: d332c82, dependency_versions: run.json, config_file: experiments/b07/google-youtube/b07-google-offset-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
-artifacts: {pcap_client: {sha256: 67af1696ee22ff8202aff8fc61e59a865bf4d192afc8ff096582dc1bea8229df}, pcap_server: null}
+artifacts: {pcap_client: {sha256: 67af1696ee22ff8202aff8fc61e59a865bf4d192afc8ff096582dc1bea8229df}, pcap_server: null, runner_log: {sha256: c644cd7d6c1f6ce4e184a9e95d4996080749db5f1812faa83b691883e4068dc4}, observations: {sha256: cc1b486828854d965786e47e967ef7cd1747db4ffc8b1f57d2f5e9b5971d84a0}, wire_plan: {sha256: 0f98cf7f69b764da511532beb44fd9a81bc0ce36d46bf6bd8227f61804a6633e}}
 ---
 
 ## План и ограничения

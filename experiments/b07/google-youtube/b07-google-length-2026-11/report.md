@@ -20,7 +20,7 @@ observations: {client_pcap: artifacts/b07-google-length-2026-11/client.pcap, ser
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: "Обе длины 260 и 300 байт: TLS 1.2 завершился.", compatible_hypotheses: [эффект есть, эффекта нет], excluded_hypotheses: [], inconclusive_reason: "Одна пара не устанавливает воспроизводимый эффект или отсутствие эффекта."}
 reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b07/google-youtube/b07-google-length-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
-artifacts: {pcap_client: {sha256: e37bf31c15cf04c05c6652ddc5236be1b18d6613ea81e2081a301036d869d98c}, pcap_server: null}
+artifacts: {pcap_client: {sha256: e37bf31c15cf04c05c6652ddc5236be1b18d6613ea81e2081a301036d869d98c}, pcap_server: null, runner_log: {sha256: f6479947376aed4b8f5ca925117500cd429ce80dff53fc02af747ee1c3260daa}, observations: {sha256: b2f2ca507117476f0aed056109da01b7359980d92926d0896044593254274408}, wire_plan: {sha256: cab3ed3511796830d1cbf6450b5bc740b4bf06108870b1092809edae03443bec}}
 ---
 
 ## План и ограничения

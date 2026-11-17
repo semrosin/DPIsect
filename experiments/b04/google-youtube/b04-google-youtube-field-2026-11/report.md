@@ -20,7 +20,7 @@ observations: {client_pcap: artifacts/b04-google-youtube-field-2026-11/client.pc
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: "Контрольный ClientHello повторился без наблюдаемого ответа; серия остановлена.", compatible_hypotheses: [эффект есть, эффекта нет], excluded_hypotheses: [], inconclusive_reason: "Исследуемый вариант не запускался, сравнение отсутствует."}
 reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b04/google-youtube/b04-google-youtube-field-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
-artifacts: {pcap_client: {sha256: 1aa5d7e8289bbb339f9d93c59f520310b3669e2630118d9077cfe66a718fdee1}, pcap_server: null}
+artifacts: {pcap_client: {sha256: 1aa5d7e8289bbb339f9d93c59f520310b3669e2630118d9077cfe66a718fdee1}, pcap_server: null, runner_log: {sha256: 739e84ab810ff4a43d3aa629163573aa94a9ebf4ba6c2d011a33d939e22cf1a3}, observations: {sha256: 2758bdd2604d34586e6727ce8561573fbf9f32e95d7405d8bd466808ed6beb0e}, wire_plan: {sha256: cb28ad6311c5e1edc8a6e9852e351a1b97e485d3b05ab38a7d6129c4eecf369a}}
 ---
 
 ## План и ограничения

@@ -20,7 +20,7 @@ observations: {client_pcap: artifacts/b07-google-offset-paced-2026-11/client.pca
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: "Оба смещения 110 и 130 байт: TLS 1.2 завершился.", compatible_hypotheses: [эффект есть, эффекта нет], excluded_hypotheses: [], inconclusive_reason: "Одна пара не устанавливает воспроизводимый эффект или отсутствие эффекта."}
 reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b07/google-youtube/b07-google-offset-paced-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
-artifacts: {pcap_client: {sha256: 6b671f3cc113a5ed6d94bca281d36dff4f90b96716eaae9acc6956fe75a6e3c1}, pcap_server: null}
+artifacts: {pcap_client: {sha256: 6b671f3cc113a5ed6d94bca281d36dff4f90b96716eaae9acc6956fe75a6e3c1}, pcap_server: null, runner_log: {sha256: 7db2d9c471fdc56cb4d850f462b3525f36f1379bff8fa41d9fdda16437099da5}, observations: {sha256: 71293fadb91b017f9d8f0951086a2ac8b6a8506341bbc95368204e2c4524e2bc}, wire_plan: {sha256: b0856b01b8578a5dba61a849bfdc96104e98e5a5ec4a3200cf11ed5c277bea57}}
 ---
 
 ## План и ограничения

@@ -20,7 +20,7 @@ observations: {client_pcap: artifacts/b01-google-youtube-sni-2026-11/client.pcap
 classification_rule: Одна пара на чужом target является пилотом; недостаток наблюдений и отсутствие серверного контроля оставляют вопрос inconclusive. Незапущенные попытки не классифицируются как измерения.
 results: {observation: "Google завершил TLS; YouTube ClientHello повторился без наблюдаемого ответа.", compatible_hypotheses: [сетевое вмешательство, поведение сервера, потеря пакетов], excluded_hypotheses: [], inconclusive_reason: "Одна пара без серверного наблюдения не устанавливает причину различия или принятие YouTube сервером."}
 reproduce: {tool_commit: 9a25b0f, dependency_versions: run.json, config_file: experiments/b01/google-youtube/b01-google-youtube-sni-2026-11/config.yaml, date_utc: 2026-11-17, operator: qjolk, lab_config_id: null, timestamps_utc: run.json}
-artifacts: {pcap_client: {sha256: f8b199952c1faafd1f6b6b991c73134b296a9259ba9250728412a684c6b483c5}, pcap_server: null}
+artifacts: {pcap_client: {sha256: f8b199952c1faafd1f6b6b991c73134b296a9259ba9250728412a684c6b483c5}, pcap_server: null, runner_log: {sha256: 950081cb3a27c76f2d21f94331a341458da1ad9f9ccc662d9fd2144ba53c1bbb}, observations: {sha256: 08c47fad5a7064c1c44c2c9bf7838b07e51be5c282520bd8e9ba80788b8f0412}, wire_plan: {sha256: 6ad8e7aca897dce3e7dbd4dfc7c037a72209de81bd56fa67fa86af013a1ba0bc}}
 ---
 
 ## План и ограничения
