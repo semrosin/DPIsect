@@ -15,19 +15,10 @@ const maxSNIHostLen = 253
 // The function never returns malformed output — that is the contract
 // of the valid path.
 func BuildClientHello(sni string, rnd [32]byte) ([]byte, error) {
-	return buildClientHello(sni, rnd, 0)
+	return buildClientHello(sni, rnd)
 }
 
-// buildPaddedClientHello creates a record of exactly recordLength bytes.
-// The padding extension is included even when its payload is empty.
-func buildPaddedClientHello(sni string, rnd [32]byte, recordLength int) ([]byte, error) {
-	if recordLength <= 0 {
-		return nil, fmt.Errorf("client hello: record length must be positive")
-	}
-	return buildClientHello(sni, rnd, recordLength)
-}
-
-func buildClientHello(sni string, rnd [32]byte, recordLength int) ([]byte, error) {
+func buildClientHello(sni string, rnd [32]byte) ([]byte, error) {
 	if err := validateSNI(sni); err != nil {
 		return nil, err
 	}
@@ -64,15 +55,6 @@ func buildClientHello(sni string, rnd [32]byte, recordLength int) ([]byte, error
 		0x13, 0x01, 0x13, 0x02, 0x13, 0x03,
 		0xc0, 0x2b, 0xc0, 0x2c, 0xcc, 0xa9,
 		0xc0, 0x2f, 0xc0, 0x30, 0xcc, 0xa8,
-	}
-	if recordLength > 0 {
-		// Record and handshake headers, then the fixed body fields.
-		baseLength := 5 + 4 + 2 + 32 + 1 + 2 + len(ciphers) + 2 + 2 + len(exts)
-		paddingLength := recordLength - baseLength - 4 // extension header
-		if paddingLength < 0 || recordLength > 5+(1<<14) {
-			return nil, fmt.Errorf("client hello: record length %d cannot accommodate padding", recordLength)
-		}
-		exts = appendExt(exts, 0x0015, make([]byte, paddingLength))
 	}
 
 	body := make([]byte, 0, 2+32+1+2+len(ciphers)+2+2+len(exts))
