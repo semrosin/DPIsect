@@ -18,18 +18,19 @@ type sniWireTrial struct {
 }
 
 type sniWirePlan struct {
-	ExperimentID string         `yaml:"experiment_id"`
-	QuestionID   string         `yaml:"question_id"`
-	Mode         string         `yaml:"mode"`
-	TCPOnly      bool           `yaml:"tcp_only,omitempty"`
-	Endpoint     Endpoint       `yaml:"endpoint"`
-	Trials       []sniWireTrial `yaml:"trials"`
-	GapMS        int            `yaml:"inter_trial_gap_ms"`
-	TimeoutMS    int            `yaml:"trial_timeout_ms"`
-	StateReset   string         `yaml:"state_reset"`
-	Budget       Budget         `yaml:"budget"`
-	Rule         string         `yaml:"classification_rule"`
-	WireNotes    string         `yaml:"wire_notes"`
+	ExperimentID       string         `yaml:"experiment_id"`
+	QuestionID         string         `yaml:"question_id"`
+	Mode               string         `yaml:"mode"`
+	TCPOnly            bool           `yaml:"tcp_only,omitempty"`
+	Endpoint           Endpoint       `yaml:"endpoint"`
+	Trials             []sniWireTrial `yaml:"trials"`
+	GapMS              int            `yaml:"inter_trial_gap_ms"`
+	TimeoutMS          int            `yaml:"trial_timeout_ms"`
+	ClientHelloDelayMS int            `yaml:"client_hello_delay_ms,omitempty"`
+	StateReset         string         `yaml:"state_reset"`
+	Budget             Budget         `yaml:"budget"`
+	Rule               string         `yaml:"classification_rule"`
+	WireNotes          string         `yaml:"wire_notes"`
 }
 
 // prepareTCPWirePlan records the kernel-managed TCP control before any dial.
@@ -74,7 +75,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	}
 	plan := sniWirePlan{
 		ExperimentID: cfg.ExperimentID, QuestionID: cfg.QuestionID, Mode: cfg.Mode, Endpoint: cfg.Endpoint,
-		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
+		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, ClientHelloDelayMS: cfg.PairedClientHelloDelayMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
 		Rule:      cfg.ClassificationRule,
 		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final successful probe", postTrialCaptureWindow),
 	}

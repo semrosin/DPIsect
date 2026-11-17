@@ -81,6 +81,14 @@ func (p *PreparedTLS) ClientHello() []byte { return bytes.Clone(p.hello) }
 
 // Start dials one endpoint, releases the saved record and waits for TLS.
 func (p *PreparedTLS) Start(ctx context.Context, addr string) TLSObservation {
+	return p.StartAfter(ctx, addr, 0)
+}
+
+// StartAfter optionally delays the first TLS write after TCP connects.
+func (p *PreparedTLS) StartAfter(ctx context.Context, addr string, delay time.Duration) TLSObservation {
+	if delay < 0 {
+		return TLSObservation{Stage: "tcp", Error: "negative ClientHello delay"}
+	}
 	p.mu.Lock()
 	if p.started {
 		p.mu.Unlock()
@@ -91,6 +99,20 @@ func (p *PreparedTLS) Start(ctx context.Context, addr string) TLSObservation {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return TLSObservation{Stage: "tcp", Error: err.Error()}
+	}
+	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			_ = conn.Close()
+			return TLSObservation{Stage: "tls", Error: ctx.Err().Error()}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		_ = conn.Close()
+		return TLSObservation{Stage: "tls", Error: err.Error()}
 	}
 	if err := p.conn.attach(conn); err != nil {
 		_ = conn.Close()

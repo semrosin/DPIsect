@@ -10,6 +10,7 @@ sni: example.com # ClientHello SNI (required for valid-session)
 # paired_sni: web.telegram.org # optional treatment; sni is the control
 # schedule.repetitions becomes the number of pairs for offline preparation.
 # paired_timeout_ms: 5000 # per-attempt TCP/TLS deadline
+# paired_client_hello_delay_ms: 1100 # optional delay after TCP; shorter than timeout
 # -prepare-sni writes only a logical schedule; execution requires -capture-iface.
 # TCP-only alternative: set tcp_only: true and tcp_timeout_ms: 5000;
 # omit both sni and paired_sni. No application data is sent.

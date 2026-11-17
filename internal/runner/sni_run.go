@@ -129,7 +129,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		session := sessions[index]
 		index++
 		defer session.Close()
-		return session.Start(ctx, addr)
+		return session.StartAfter(ctx, addr, time.Duration(cfg.PairedClientHelloDelayMS)*time.Millisecond)
 	}
 	logger.Info("series started", "event", "series_start", "experiment", cfg.ExperimentID, "tcp_only", cfg.TCPOnly)
 	timeoutMS := cfg.PairedTimeoutMS

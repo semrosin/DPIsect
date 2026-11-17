@@ -29,8 +29,9 @@ func PrepareSNIComparison(cfg Config, configPath string) error {
 		Names        []string `yaml:"sni_schedule"`
 		GapMS        int      `yaml:"inter_trial_gap_ms"`
 		TimeoutMS    int      `yaml:"trial_timeout_ms"`
+		DelayMS      int      `yaml:"client_hello_delay_ms,omitempty"`
 		Ready        bool     `yaml:"execution_ready"`
-	}{cfg.ExperimentID, cfg.Endpoint, names, cfg.Schedule.InterTrialGapMS, cfg.PairedTimeoutMS, false}
+	}{cfg.ExperimentID, cfg.Endpoint, names, cfg.Schedule.InterTrialGapMS, cfg.PairedTimeoutMS, cfg.PairedClientHelloDelayMS, false}
 	data, err := yaml.Marshal(plan)
 	if err != nil {
 		return fmt.Errorf("marshal SNI schedule: %w", err)

@@ -39,6 +39,8 @@ type Config struct {
 	PairedSNI string `yaml:"paired_sni,omitempty"`
 	// PairedTimeoutMS bounds each TCP/TLS attempt.
 	PairedTimeoutMS int `yaml:"paired_timeout_ms,omitempty"`
+	// PairedClientHelloDelayMS delays TLS after TCP connects in paired runs.
+	PairedClientHelloDelayMS int `yaml:"paired_client_hello_delay_ms,omitempty"`
 	// TCPOnly runs ordinary TCP connectivity controls without application data.
 	TCPOnly      bool         `yaml:"tcp_only,omitempty"`
 	TCPTimeoutMS int          `yaml:"tcp_timeout_ms,omitempty"`
@@ -234,6 +236,9 @@ func (c Config) Validate() error {
 	if (c.TCPOnly || c.PairedSNI != "") && (c.Preflight.Enabled || c.Lab.Enabled) {
 		errs = append(errs, errors.New("TCP and paired SNI runs do not support preflight or lab profiles"))
 	}
+	if c.PairedSNI == "" && c.PairedClientHelloDelayMS != 0 {
+		errs = append(errs, errors.New("paired_client_hello_delay_ms requires paired_sni"))
+	}
 	if c.PairedSNI != "" {
 		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
 			errs = append(errs, errors.New("paired SNI requires an IPv4 endpoint"))
@@ -243,6 +248,9 @@ func (c Config) Validate() error {
 		}
 		if c.PairedTimeoutMS <= 0 || int64(c.PairedTimeoutMS) > int64(c.Budget.MaxDurationS)*1000 {
 			errs = append(errs, errors.New("paired_timeout_ms must be positive and within the series duration"))
+		}
+		if c.PairedClientHelloDelayMS < 0 || c.PairedClientHelloDelayMS >= c.PairedTimeoutMS {
+			errs = append(errs, errors.New("paired_client_hello_delay_ms must be nonnegative and shorter than paired_timeout_ms"))
 		}
 		if modeErr == nil && mode != generator.ValidSession {
 			errs = append(errs, errors.New("paired_sni requires valid-session mode"))
