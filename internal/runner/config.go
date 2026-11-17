@@ -259,6 +259,12 @@ func (c Config) Validate() error {
 	if c.PairedSNI == "" && c.PairedCloseDelayMS != 0 {
 		errs = append(errs, errors.New("paired_close_delay_ms requires paired_sni"))
 	}
+	if c.PairedSNI == "" && c.PairedTimeoutMS != 0 {
+		errs = append(errs, errors.New("paired_timeout_ms requires paired_sni"))
+	}
+	if !c.TCPOnly && c.TCPTimeoutMS != 0 {
+		errs = append(errs, errors.New("tcp_timeout_ms requires tcp_only"))
+	}
 	if c.PairedHello != nil {
 		if c.PairedSNI == "" || c.TCPOnly {
 			errs = append(errs, errors.New("paired_hello requires paired_sni"))

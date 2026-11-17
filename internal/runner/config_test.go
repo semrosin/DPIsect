@@ -117,6 +117,20 @@ func TestLoadRejectsInvalidConfigs(t *testing.T) {
 			},
 			wantErr: "repetitions",
 		},
+		{
+			name: "paired timeout without paired sni",
+			mutate: func(s string) string {
+				return s + "paired_timeout_ms: 5000\n"
+			},
+			wantErr: "paired_timeout_ms requires paired_sni",
+		},
+		{
+			name: "tcp timeout without tcp only",
+			mutate: func(s string) string {
+				return s + "tcp_timeout_ms: 5000\n"
+			},
+			wantErr: "tcp_timeout_ms requires tcp_only",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
