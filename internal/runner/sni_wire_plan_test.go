@@ -15,7 +15,7 @@ func TestPrepareSNIWirePlanPersistsExactClientHellosWithoutDial(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	content := runConfigYAML("192.0.2.10", 443, 2, 100, dir) + "paired_sni: web.telegram.org\n"
+	content := runConfigYAML("192.0.2.10", 443, 2, 100, dir) + "paired_sni: web.telegram.org\npaired_client_hello_delay_ms: 1100\n"
 	configPath := writeRunConfig(t, dir, content)
 	cfg, err := Load(configPath)
 	if err != nil {
@@ -45,6 +45,9 @@ func TestPrepareSNIWirePlanPersistsExactClientHellosWithoutDial(t *testing.T) {
 	}
 	if len(saved.Trials) != len(sessions) {
 		t.Fatalf("saved trials = %d, want %d", len(saved.Trials), len(sessions))
+	}
+	if saved.ClientHelloDelayMS != 1100 {
+		t.Fatalf("saved delay = %d", saved.ClientHelloDelayMS)
 	}
 	for i, trial := range saved.Trials {
 		if !bytes.Equal(trial.Packet.Payload, sessions[i].ClientHello()) {

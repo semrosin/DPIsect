@@ -142,6 +142,7 @@ func TestTCPControlRejectsIgnoredOrUnsafeOptions(t *testing.T) {
 		{"raw mode", strings.Replace(base, "mode: valid-session", "mode: raw-experiment", 1)},
 		{"paired SNI", base + "paired_sni: web.telegram.org\n"},
 		{"SNI", base + "sni: example.com\n"},
+		{"paired delay", base + "paired_client_hello_delay_ms: 100\n"},
 		{"preflight", base + "preflight: {enabled: true, host: example.com, independent_resolver: 192.0.2.53:53}\n"},
 		{"lab profile", base + "lab: {enabled: true, config_id: x}\n"},
 		{"IPv6", strings.Replace(base, "127.0.0.1", "2001:db8::1", 1)},
