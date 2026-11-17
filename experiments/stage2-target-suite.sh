@@ -5,6 +5,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 prober=artifacts/stage2-close-delay/dpi-prober
 target=142.251.155.119
 iface=eth0
+offload_state=artifacts/stage2-offload-state.txt
 experiments=(
   experiments/b07/google-youtube/b07-google-offset-paced-2026-11
   experiments/b07/google-youtube/b07-google-length-2026-11
@@ -17,13 +18,36 @@ hashes=(
   00cc7c297c14d206dfeb5f3ee926a9c33bf6f7eda8605c629db82bda4cc29a32
   08ec66314a63b4912957a15b852024a1520f576ddfd72108f1b3ba8da4798c90
 )
+usage() {
+  printf 'Usage: bash %s --confirm-target %s [--b01-only]\n' "$0" "$target" >&2
+  printf '       bash %s --restore\n' "$0" >&2
+}
+
+if [[ "${1:-}" == --restore ]]; then
+  if [[ ! -f "$offload_state" ]]; then
+    printf 'Offload state file is missing: %s\n' "$offload_state" >&2
+    exit 1
+  fi
+  read -r iface tso gso gro lro < "$offload_state"
+  sudo ethtool -K "$iface" tso "$tso" gso "$gso" gro "$gro" lro "$lro"
+  rm -f "$offload_state"
+  printf 'Offload settings restored on %s.\n' "$iface"
+  exit 0
+fi
+if [[ "${1:-}" != --confirm-target || "${2:-}" != "$target" ]]; then
+  printf 'Refusing: confirm the target IP explicitly with --confirm-target %s.\n' "$target" >&2
+  usage
+  exit 1
+fi
+shift 2
 if [[ $# -eq 1 && $1 == --b01-only ]]; then
   experiments=("${experiments[3]}")
   hashes=("${hashes[3]}")
 elif [[ $# -ne 0 ]]; then
-  printf 'Usage: bash %s [--b01-only]\n' "$0" >&2
+  usage
   exit 1
 fi
+operator=${DPISECT_OPERATOR:?set DPISECT_OPERATOR to the operator full name}
 
 if [[ -e docs/DO_NOT_SCAN.md ]]; then
   printf '%s\n' 'Do Not Scan list exists; review it and prepare a new approved plan.' >&2
@@ -44,7 +68,7 @@ for i in "${!experiments[@]}"; do
     printf 'Config differs from the prepared plan: %s\n' "$experiment" >&2
     exit 1
   fi
-  for path in "$experiment/plan.yaml" "$experiment/run.json" "artifacts/$id/client.pcap" "artifacts/$id/runner.log" "artifacts/$id/sni-observations.json"; do
+  for path in "$experiment/plan.yaml" "$experiment/run.json" "artifacts/$id/client.pcap" "artifacts/$id/runner.log" "artifacts/$id/sni-observations.json" "artifacts/$id/confirmations.log"; do
     if [[ -e "$path" ]]; then
       printf 'Existing experiment file; refusing to overwrite: %s\n' "$path" >&2
       exit 1
@@ -103,6 +127,8 @@ cleanup() {
           "$(feature large-receive-offload)" != "$lro" ]]; then
       printf '%s\n' 'Restored offload settings differ from the original values.' >&2
       status=1
+    else
+      rm -f "$offload_state"
     fi
   fi
   exit "$status"
@@ -112,6 +138,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 offload_changed=1
+install -d -m 0700 "$(dirname -- "$offload_state")"
+( umask 077; printf '%s %s %s %s %s\n' "$iface" "$tso" "$gso" "$gro" "$lro" > "$offload_state" )
 sudo ethtool -K "$iface" tso off gso off gro off lro off
 features=$(ethtool -k "$iface")
 for name in tcp-segmentation-offload generic-segmentation-offload generic-receive-offload large-receive-offload; do
@@ -131,9 +159,23 @@ for i in "${!experiments[@]}"; do
     printf '%s\n' 'Do Not Scan list appeared; remaining series will not run.' >&2
     exit 1
   fi
+  printf 'Series %s sends probes to %s. Type the experiment id to confirm: ' "$id" "$target"
+  answer=''
+  if ! IFS= read -r answer </dev/tty; then
+    printf '\nUnable to read the confirmation; the series was not started.\n' >&2
+    exit 1
+  fi
+  if [[ "$answer" != "$id" ]]; then
+    printf 'Series %s was not confirmed; remaining series will not run.\n' "$id" >&2
+    exit 1
+  fi
+  install -d -m 0700 "artifacts/$id"
+  printf 'confirmed_by=%s confirmed_utc=%s series=%s target=%s\n' \
+    "${SUDO_USER:-${USER:-unknown}}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$id" "$target" \
+    >> "artifacts/$id/confirmations.log"
   printf '\nSeries %s (%s/%s)\n' "$id" "$((i+1))" "${#experiments[@]}"
   status=0
-  GODEBUG= "$prober" -config "$experiment/config.yaml" -capture-iface "$iface" -operator "${USER:-unknown}" || status=$?
+  GODEBUG= "$prober" -config "$experiment/config.yaml" -capture-iface "$iface" -operator "$operator" || status=$?
   if [[ -f "$observation" ]]; then cat "$observation"; fi
   if (( status != 0 )); then
     printf 'Series stopped with code %s; remaining series will not run.\n' "$status" >&2
