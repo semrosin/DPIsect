@@ -21,3 +21,7 @@ artifacts/
 *.pem
 SSLKEYLOGFILE
 *.log
+
+# Fixtures with known causes are part of the test suite (docs/GO_STYLE.md §6)
+!testdata/**/*.pcap
+!testdata/**/*.pcapng

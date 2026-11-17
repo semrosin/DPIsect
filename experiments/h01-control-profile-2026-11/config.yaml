@@ -1,0 +1,61 @@
+# First full run of stage 1: control profile against the local helper
+# (docs/DEVELOPMENT.md §Этап 1, подшаг 9). Schema: docs/config.example.yaml.
+
+question_id: H01
+experiment_id: h01-control-profile-2026-11
+mode: valid-session
+sni: control.example
+
+endpoint:
+  role: helper
+  ip: 127.0.0.1
+  port: 8443
+
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  stop_conditions: []
+
+schedule:
+  repetitions: 1
+  seed: 42
+  inter_trial_gap_ms: 100
+  state_reset: none
+
+# Preflight (G01/G02) stays off: a loopback helper has no DNS name to
+# compare, and an external resolver query is not part of this run.
+preflight:
+  enabled: false
+  host: ""
+  independent_resolver: ""
+
+# Control profile = no impairment; config_id still records the profile.
+lab:
+  enabled: false
+  config_id: control-unimpaired
+  loss_percent: 0.0
+  reorder_percent: 0.0
+  delay_ms: 0
+  mtu: 0
+
+capture: # outside git, docs/SAFETY.md §5; files appear only when the
+  # run has CAP_NET_RAW (this environment runs without it)
+  client: artifacts/h01-control-profile-2026-11/client.pcap
+  server: artifacts/h01-control-profile-2026-11/server.pcap
+helper_log: artifacts/h01-control-profile-2026-11/helper.log
+runner_log: artifacts/h01-control-profile-2026-11/runner.log
+
+# Fixed before the first packet (docs/EXPERIMENTS.md §2).
+classification_rule: |
+  Confirmed iff (1) the H01 classifier labels all six reference
+  fixtures in testdata/ as their known causes (none, drop,
+  rst_injection, tls_alert, modification, throttling) and (2) this
+  control run delivers the planned ClientHello to the helper — the
+  helper journals client_hello — within budget, with plan.yaml and
+  run.json written. Refuted if any fixture label differs or the probe
+  is not delivered. Inconclusive if fixtures or the run cannot be
+  executed at all. Client and server PCAP capture is required evidence
+  for a follow-up run with CAP_NET_RAW, not part of this rule: their
+  absence here must be reported as a limitation, never as success.
