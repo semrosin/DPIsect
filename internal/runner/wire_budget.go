@@ -24,12 +24,29 @@ type wireBudget struct {
 	maxFrameLength     int
 	synSeen            map[synKey]int
 	synRetransmissions int
+	flows              map[flowKey]*flowState
 }
 
 type synKey struct {
 	src  [4]byte
 	port layers.TCPPort
 	seq  uint32
+}
+
+type flowKey struct {
+	src  [4]byte
+	port layers.TCPPort
+}
+
+type sequenceRange struct {
+	start  uint32
+	length uint32
+}
+
+type flowState struct {
+	synSeen bool
+	synSeq  uint32
+	ranges  []sequenceRange
 }
 
 func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
@@ -40,7 +57,7 @@ func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
 	if limits.MaxSYNRetransmissions != nil && *limits.MaxSYNRetransmissions <= 0 {
 		return nil, fmt.Errorf("invalid SYN retransmission limit")
 	}
-	return &wireBudget{ip: addr, port: layers.TCPPort(port), limits: limits, synSeen: make(map[synKey]int)}, nil
+	return &wireBudget{ip: addr, port: layers.TCPPort(port), limits: limits, synSeen: make(map[synKey]int), flows: make(map[flowKey]*flowState)}, nil
 }
 
 // observe returns an error once an observed limit is reached or the frame
@@ -85,6 +102,11 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 	if b.maxFrameLength > 0 && originalLength > b.maxFrameLength {
 		return fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance; offload may obscure packet counts")
 	}
+	if toTarget && tcp.DstPort == b.port {
+		if err := b.observeOutgoing(ip, tcp); err != nil {
+			return err
+		}
+	}
 	if b.limits.MaxSYNRetransmissions != nil && toTarget && tcp.DstPort == b.port && tcp.SYN && !tcp.ACK {
 		var key synKey
 		copy(key.src[:], ip.SrcIP.To4())
@@ -113,6 +135,43 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 	if b.packets >= wireStopThreshold(b.limits.MaxPackets) || b.bytes >= wireStopThreshold(b.limits.MaxBytes) || len(b.recent) >= wireStopThreshold(b.limits.MaxRatePPS) {
 		return fmt.Errorf("wire budget: observed limit reached (%d packets, %d bytes, %d outgoing packets in one second)", b.packets, b.bytes, len(b.recent))
 	}
+	return nil
+}
+
+// observeOutgoing detects overlapping TCP sequence space for data and FIN.
+// Capture duplicates can conservatively stop a series as if retransmitted.
+func (b *wireBudget) observeOutgoing(ip *layers.IPv4, tcp *layers.TCP) error {
+	var key flowKey
+	copy(key.src[:], ip.SrcIP.To4())
+	key.port = tcp.SrcPort
+	flow := b.flows[key]
+	if flow == nil {
+		flow = &flowState{}
+		b.flows[key] = flow
+	}
+	if tcp.SYN && !tcp.ACK {
+		if flow.synSeen && flow.synSeq != tcp.Seq {
+			flow.ranges = nil
+		}
+		flow.synSeen, flow.synSeq = true, tcp.Seq
+	}
+	length := uint32(len(tcp.Payload))
+	if tcp.FIN {
+		length++
+	}
+	if length == 0 {
+		return nil
+	}
+	start := tcp.Seq
+	if tcp.SYN {
+		start++
+	}
+	for _, previous := range flow.ranges {
+		if int32(start-previous.start) < int32(previous.length) && int32(previous.start-start) < int32(length) {
+			return fmt.Errorf("wire budget: outgoing data or FIN retransmission detected")
+		}
+	}
+	flow.ranges = append(flow.ranges, sequenceRange{start: start, length: length})
 	return nil
 }
 
