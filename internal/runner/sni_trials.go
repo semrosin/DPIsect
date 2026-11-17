@@ -17,6 +17,8 @@ type sniTrial struct {
 
 type tlsProbe func(context.Context, string, string) sender.TLSObservation
 
+const postTrialCaptureWindow = 1500 * time.Millisecond
+
 // observeSNITrials keeps completed observations when cancellation stops a series.
 func observeSNITrials(ctx context.Context, addr string, names []string, timeout, gap time.Duration, probe tlsProbe) ([]sniTrial, error) {
 	if addr == "" || len(names) == 0 || timeout <= 0 || gap < 0 || probe == nil {
@@ -69,7 +71,7 @@ func runMonitoredSNITrials(ctx context.Context, addr string, names []string, tim
 	if trialErr == nil {
 		// Give the capture reader a bounded opportunity to collect the
 		// final connection teardown before stopping it.
-		trialErr = sleepCtx(ctx, 250*time.Millisecond)
+		trialErr = sleepCtx(ctx, postTrialCaptureWindow)
 	}
 	cancel()
 	monitorErr := <-monitorDone

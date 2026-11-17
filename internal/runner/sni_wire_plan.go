@@ -45,7 +45,7 @@ func prepareTCPWirePlan(cfg Config, configPath string) (sniWirePlan, error) {
 		TCPOnly: true, Endpoint: cfg.Endpoint, GapMS: cfg.Schedule.InterTrialGapMS,
 		TimeoutMS: cfg.TCPTimeoutMS, StateReset: cfg.Schedule.StateReset,
 		Budget: cfg.Budget, Rule: cfg.ClassificationRule,
-		WireNotes: "ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions",
+		WireNotes: fmt.Sprintf("ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions; capture continues up to %s after the final successful probe", postTrialCaptureWindow),
 		Trials:    make([]sniWireTrial, cfg.Schedule.Repetitions),
 	}
 	data, err := yaml.Marshal(plan)
@@ -76,7 +76,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		ExperimentID: cfg.ExperimentID, QuestionID: cfg.QuestionID, Mode: cfg.Mode, Endpoint: cfg.Endpoint,
 		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
 		Rule:      cfg.ClassificationRule,
-		WireNotes: "TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed",
+		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final successful probe", postTrialCaptureWindow),
 	}
 	sessions := make([]*sender.PreparedTLS, 0, len(names))
 	complete := false
