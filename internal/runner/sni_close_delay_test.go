@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func TestCloseDelayCancellationAndFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	got := waitBeforeClose(ctx, sender.TLSObservation{Stage: "complete"}, time.Second)
-	if got.Stage != "tls" || got.Error == "" {
+	if got.Stage != "complete" || !strings.Contains(got.Error, "close delay interrupted") {
 		t.Fatalf("cancelled delay: %+v", got)
 	}
 	start := time.Now()

@@ -11,6 +11,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestWriteNewFileIsIdempotentOnlyForIdenticalBytes(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "plan.yaml")
+	if err := writeNewFile(path, []byte("plan\n"), 0o644); err != nil {
+		t.Fatalf("write new file: %v", err)
+	}
+	if err := writeNewFile(path, []byte("plan\n"), 0o644); err != nil {
+		t.Fatalf("identical bytes must be accepted: %v", err)
+	}
+	if err := writeNewFile(path, []byte("other\n"), 0o644); err == nil {
+		t.Fatal("different bytes must not replace an existing file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(data) != "plan\n" {
+		t.Fatalf("file = %q, want the original content", data)
+	}
+}
+
 func TestPrepareSNIWirePlanPersistsExactClientHellosWithoutDial(t *testing.T) {
 	t.Parallel()
 

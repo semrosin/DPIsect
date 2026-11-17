@@ -3,10 +3,12 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,6 +116,41 @@ func TestSNIComparisonRunsAfterPlanAndSavesResults(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Errorf("missing %s: %v", path, err)
 		}
+	}
+}
+
+func TestSNIComparisonLeavesNoArtifactsAfterPreflightFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	runPath := filepath.Join(dir, "run.json")
+	if err := os.WriteFile(runPath, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	content := runConfigYAML("127.0.0.1", 443, 1, 100, dir) + "paired_sni: web.telegram.org\n"
+	configPath := writeRunConfig(t, dir, content)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Budget.StopConditions = []string{"SIGINT"}
+	maxRetries := 1
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
+	open := func(_, _ string) (pairWireSource, error) {
+		t.Fatal("capture must not start when artifacts already exist")
+		return nil, nil
+	}
+	err = runObservedSeries(context.Background(), cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open)
+	if err == nil || !strings.Contains(err.Error(), "refusing to overwrite") {
+		t.Fatalf("error = %v, want an existing artifact refusal", err)
+	}
+	for _, name := range []string{"sni-observations.json", "runner.log"} {
+		if _, statErr := os.Stat(filepath.Join(dir, name)); !errors.Is(statErr, os.ErrNotExist) {
+			t.Errorf("%s must not be created before preflight, stat error = %v", name, statErr)
+		}
+	}
+	if data, readErr := os.ReadFile(runPath); readErr != nil || string(data) != "{}\n" {
+		t.Errorf("pre-existing run.json was modified: %q, %v", data, readErr)
 	}
 }
 

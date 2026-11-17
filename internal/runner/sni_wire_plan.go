@@ -1,9 +1,11 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -56,7 +58,7 @@ func prepareTCPWirePlan(cfg Config, configPath string) (sniWirePlan, error) {
 	if err != nil {
 		return sniWirePlan{}, fmt.Errorf("marshal TCP plan: %w", err)
 	}
-	if err := writeNewSNIWirePlan(filepath.Join(filepath.Dir(configPath), "plan.yaml"), data); err != nil {
+	if err := writeNewFile(filepath.Join(filepath.Dir(configPath), "plan.yaml"), data, 0o644); err != nil {
 		return sniWirePlan{}, err
 	}
 	return plan, nil
@@ -119,32 +121,39 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	if err != nil {
 		return sniWirePlan{}, nil, fmt.Errorf("marshal wire plan: %w", err)
 	}
-	if err := writeNewSNIWirePlan(filepath.Join(filepath.Dir(configPath), "plan.yaml"), data); err != nil {
+	if err := writeNewFile(filepath.Join(filepath.Dir(configPath), "plan.yaml"), data, 0o644); err != nil {
 		return sniWirePlan{}, nil, err
 	}
 	complete = true
 	return plan, sessions, nil
 }
 
-func writeNewSNIWirePlan(path string, data []byte) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".wire-plan-*")
+func writeNewFile(path string, data []byte, perm os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
 	if err != nil {
-		return fmt.Errorf("create temporary wire plan: %w", err)
+		return fmt.Errorf("create temporary %s: %w", filepath.Base(path), err)
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
-	if err := f.Chmod(0o644); err != nil {
+	if err := f.Chmod(perm); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("set wire plan permissions: %w", err)
+		return fmt.Errorf("set %s permissions: %w", filepath.Base(path), err)
 	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("write wire plan: %w", err)
+		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("close wire plan: %w", err)
+		return fmt.Errorf("close %s: %w", filepath.Base(path), err)
 	}
 	if err := os.Link(f.Name(), path); err != nil {
-		return fmt.Errorf("install wire plan (existing plans are not replaced): %w", err)
+		var linkErr *os.LinkError
+		if errors.As(err, &linkErr) && errors.Is(linkErr.Err, fs.ErrExist) {
+			existing, readErr := os.ReadFile(path)
+			if readErr == nil && bytes.Equal(existing, data) {
+				return nil
+			}
+		}
+		return fmt.Errorf("install %s (existing files are not replaced): %w", filepath.Base(path), err)
 	}
 	return nil
 }

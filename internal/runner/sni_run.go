@@ -92,17 +92,14 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		obsName = "tcp-observations.json"
 	}
 	obsPath := filepath.Join(filepath.Dir(cfg.RunnerLog), obsName)
-	obsFile, err := os.OpenFile(obsPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("reserve observations: %w", err)
-	}
-	defer func() { _ = obsFile.Close() }()
 	runPath := filepath.Join(filepath.Dir(opts.ConfigPath), "run.json")
-	runFile, err := os.OpenFile(runPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return fmt.Errorf("reserve run metadata: %w", err)
+	for _, path := range []string{obsPath, runPath} {
+		if _, err := os.Lstat(path); err == nil {
+			return fmt.Errorf("refusing to overwrite existing artifact: %s", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect artifact path %s: %w", path, err)
+		}
 	}
-	defer func() { _ = runFile.Close() }()
 	logFile, err := os.OpenFile(cfg.RunnerLog, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("reserve runner log: %w", err)
@@ -164,7 +161,12 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	if runErr != nil {
 		obs.StopReason = runErr.Error()
 	}
+	obsFile, err := os.OpenFile(obsPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return errors.Join(runErr, fmt.Errorf("create observations: %w", err))
+	}
 	if err := json.NewEncoder(obsFile).Encode(obs); err != nil {
+		_ = obsFile.Close()
 		return errors.Join(runErr, fmt.Errorf("write observations: %w", err))
 	}
 	if err := obsFile.Close(); err != nil {
@@ -174,7 +176,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	if err := logFile.Close(); err != nil {
 		return errors.Join(runErr, fmt.Errorf("close runner log: %w", err))
 	}
-	artifacts, err := hashArtifacts(logger, []string{cfg.Capture.Client, obsPath, cfg.RunnerLog})
+	artifacts, err := hashArtifacts(slog.New(slog.NewTextHandler(os.Stderr, nil)), []string{cfg.Capture.Client, obsPath, cfg.RunnerLog})
 	if err != nil {
 		return errors.Join(runErr, err)
 	}
@@ -184,11 +186,12 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		StartedUTC: started.Format(time.RFC3339Nano), FinishedUTC: time.Now().UTC().Format(time.RFC3339Nano),
 		Operator: opts.Operator, ConfigFile: opts.ConfigPath, Artifacts: artifacts,
 	}
-	if err := json.NewEncoder(runFile).Encode(rec); err != nil {
-		return errors.Join(runErr, fmt.Errorf("write run metadata: %w", err))
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return errors.Join(runErr, fmt.Errorf("marshal run metadata: %w", err))
 	}
-	if err := runFile.Close(); err != nil {
-		return errors.Join(runErr, fmt.Errorf("close run metadata: %w", err))
+	if err := writeNewFile(runPath, append(data, '\n'), 0o644); err != nil {
+		return errors.Join(runErr, err)
 	}
 	return runErr
 }
@@ -204,6 +207,7 @@ func waitBeforeClose(ctx context.Context, result sender.TLSObservation, delay ti
 	case <-timer.C:
 		return result
 	case <-ctx.Done():
-		return sender.TLSObservation{Stage: "tls", Error: ctx.Err().Error()}
+		result.Error = "close delay interrupted: " + ctx.Err().Error()
+		return result
 	}
 }
