@@ -41,6 +41,8 @@ type Config struct {
 	PairedTimeoutMS int `yaml:"paired_timeout_ms,omitempty"`
 	// PairedClientHelloDelayMS delays TLS after TCP connects in paired runs.
 	PairedClientHelloDelayMS int `yaml:"paired_client_hello_delay_ms,omitempty"`
+	// PairedHello enables independently shaped ClientHellos for B04/B07.
+	PairedHello *PairedHello `yaml:"paired_hello,omitempty"`
 	// TCPOnly runs ordinary TCP connectivity controls without application data.
 	TCPOnly      bool         `yaml:"tcp_only,omitempty"`
 	TCPTimeoutMS int          `yaml:"tcp_timeout_ms,omitempty"`
@@ -56,6 +58,19 @@ type Config struct {
 	ClassificationRule string    `yaml:"classification_rule"`
 	Preflight          Preflight `yaml:"preflight"`
 	Lab                Lab       `yaml:"lab"`
+}
+
+// HelloVariant defines exact ClientHello coordinates and ignored bytes.
+type HelloVariant struct {
+	RecordLength int    `yaml:"record_length"`
+	SNIOffset    int    `yaml:"sni_offset"`
+	IgnoredData  string `yaml:"ignored_data"`
+}
+
+// PairedHello specifies the control and treatment wire layouts.
+type PairedHello struct {
+	Control   HelloVariant `yaml:"control"`
+	Treatment HelloVariant `yaml:"treatment"`
 }
 
 // Endpoint is the single destination of the run.
@@ -239,6 +254,19 @@ func (c Config) Validate() error {
 	if c.PairedSNI == "" && c.PairedClientHelloDelayMS != 0 {
 		errs = append(errs, errors.New("paired_client_hello_delay_ms requires paired_sni"))
 	}
+	if c.PairedHello != nil {
+		if c.PairedSNI == "" || c.TCPOnly {
+			errs = append(errs, errors.New("paired_hello requires paired_sni"))
+		}
+		for _, v := range []HelloVariant{c.PairedHello.Control, c.PairedHello.Treatment} {
+			if v.RecordLength <= 0 || v.RecordLength > 5+(1<<14) || v.SNIOffset <= 0 || v.SNIOffset >= v.RecordLength || len(v.IgnoredData) > 253 {
+				errs = append(errs, errors.New("paired_hello requires valid record lengths, SNI offsets and ignored data"))
+			}
+		}
+		if strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
+			errs = append(errs, errors.New("paired_hello variants must differ when SNI is identical"))
+		}
+	}
 	if c.PairedSNI != "" {
 		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
 			errs = append(errs, errors.New("paired SNI requires an IPv4 endpoint"))
@@ -255,7 +283,7 @@ func (c Config) Validate() error {
 		if modeErr == nil && mode != generator.ValidSession {
 			errs = append(errs, errors.New("paired_sni requires valid-session mode"))
 		}
-		if _, err := pairedSNISchedule(c.SNI, c.PairedSNI, 1); err != nil {
+		if _, err := pairedSNIScheduleFor(c.SNI, c.PairedSNI, 1, c.PairedHello != nil); err != nil {
 			errs = append(errs, err)
 		}
 		if c.Schedule.Repetitions > c.Budget.MaxPackets/2 {

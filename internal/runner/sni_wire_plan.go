@@ -13,8 +13,10 @@ import (
 )
 
 type sniWireTrial struct {
-	SNI    string                       `yaml:"sni,omitempty"`
-	Packet *generator.PlannedWirePacket `yaml:"packet,omitempty"`
+	SNI     string                       `yaml:"sni,omitempty"`
+	Variant string                       `yaml:"variant,omitempty"`
+	Shape   *HelloVariant                `yaml:"shape,omitempty"`
+	Packet  *generator.PlannedWirePacket `yaml:"packet,omitempty"`
 }
 
 type sniWirePlan struct {
@@ -46,7 +48,7 @@ func prepareTCPWirePlan(cfg Config, configPath string) (sniWirePlan, error) {
 		TCPOnly: true, Endpoint: cfg.Endpoint, GapMS: cfg.Schedule.InterTrialGapMS,
 		TimeoutMS: cfg.TCPTimeoutMS, StateReset: cfg.Schedule.StateReset,
 		Budget: cfg.Budget, Rule: cfg.ClassificationRule,
-		WireNotes: fmt.Sprintf("ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions; capture continues up to %s after the final successful probe", postTrialCaptureWindow),
+		WireNotes: fmt.Sprintf("ordinary TCP connect and close with no application data; kernel chooses sequence numbers, TCP options, TTL, checksums and retransmissions; capture continues up to %s after the final completed trial if the series is not canceled", postTrialCaptureWindow),
 		Trials:    make([]sniWireTrial, cfg.Schedule.Repetitions),
 	}
 	data, err := yaml.Marshal(plan)
@@ -69,7 +71,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	if err := cfg.Validate(); err != nil {
 		return sniWirePlan{}, nil, fmt.Errorf("invalid config: %w", err)
 	}
-	names, err := pairedSNISchedule(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions)
+	names, err := pairedSNIScheduleFor(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions, cfg.PairedHello != nil)
 	if err != nil {
 		return sniWirePlan{}, nil, err
 	}
@@ -77,7 +79,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		ExperimentID: cfg.ExperimentID, QuestionID: cfg.QuestionID, Mode: cfg.Mode, Endpoint: cfg.Endpoint,
 		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, ClientHelloDelayMS: cfg.PairedClientHelloDelayMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
 		Rule:      cfg.ClassificationRule,
-		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final successful probe", postTrialCaptureWindow),
+		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final completed trial if the series is not canceled", postTrialCaptureWindow),
 	}
 	sessions := make([]*sender.PreparedTLS, 0, len(names))
 	complete := false
@@ -88,14 +90,27 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 			}
 		}
 	}()
-	for _, name := range names {
-		session, err := sender.PrepareTLS(ctx, name, nil)
+	for i, name := range names {
+		var session *sender.PreparedTLS
+		var shape *HelloVariant
+		variant := ""
+		if cfg.PairedHello == nil {
+			session, err = sender.PrepareTLS(ctx, name, nil)
+		} else {
+			variant = pairedVariant(i)
+			value := cfg.PairedHello.Control
+			if variant == "treatment" {
+				value = cfg.PairedHello.Treatment
+			}
+			shape = &value
+			session, err = sender.PrepareShapedTLS(ctx, name, nil, sender.HelloShape{RecordLength: value.RecordLength, SNIOffset: value.SNIOffset, IgnoredBytes: []byte(value.IgnoredData)})
+		}
 		if err != nil {
 			return sniWirePlan{}, nil, fmt.Errorf("prepare %q: %w", name, err)
 		}
 		sessions = append(sessions, session)
 		payload := session.ClientHello()
-		plan.Trials = append(plan.Trials, sniWireTrial{SNI: name, Packet: &generator.PlannedWirePacket{
+		plan.Trials = append(plan.Trials, sniWireTrial{SNI: name, Variant: variant, Shape: shape, Packet: &generator.PlannedWirePacket{
 			Payload: payload, TLSRecordEnds: []int{len(payload)},
 		}})
 	}

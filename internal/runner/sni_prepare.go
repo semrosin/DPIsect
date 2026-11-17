@@ -19,7 +19,7 @@ func PrepareSNIComparison(cfg Config, configPath string) error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
-	names, err := pairedSNISchedule(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions)
+	names, err := pairedSNIScheduleFor(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions, cfg.PairedHello != nil)
 	if err != nil {
 		return err
 	}
@@ -27,11 +27,17 @@ func PrepareSNIComparison(cfg Config, configPath string) error {
 		ExperimentID string   `yaml:"experiment_id"`
 		Endpoint     Endpoint `yaml:"endpoint"`
 		Names        []string `yaml:"sni_schedule"`
+		Variants     []string `yaml:"variants,omitempty"`
 		GapMS        int      `yaml:"inter_trial_gap_ms"`
 		TimeoutMS    int      `yaml:"trial_timeout_ms"`
 		DelayMS      int      `yaml:"client_hello_delay_ms,omitempty"`
 		Ready        bool     `yaml:"execution_ready"`
-	}{cfg.ExperimentID, cfg.Endpoint, names, cfg.Schedule.InterTrialGapMS, cfg.PairedTimeoutMS, cfg.PairedClientHelloDelayMS, false}
+	}{ExperimentID: cfg.ExperimentID, Endpoint: cfg.Endpoint, Names: names, GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, DelayMS: cfg.PairedClientHelloDelayMS}
+	if cfg.PairedHello != nil {
+		for i := range names {
+			plan.Variants = append(plan.Variants, pairedVariant(i))
+		}
+	}
 	data, err := yaml.Marshal(plan)
 	if err != nil {
 		return fmt.Errorf("marshal SNI schedule: %w", err)

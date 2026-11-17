@@ -11,6 +11,10 @@ sni: example.com # ClientHello SNI (required for valid-session)
 # schedule.repetitions becomes the number of pairs for offline preparation.
 # paired_timeout_ms: 5000 # per-attempt TCP/TLS deadline
 # paired_client_hello_delay_ms: 1100 # optional delay after TCP; shorter than timeout
+# paired_hello: # optional B04/B07 TLS 1.2 profile; both coordinates are bytes
+#   control: {record_length: 250, sni_offset: 110, ignored_data: blocked.example}
+#   treatment: {record_length: 250, sni_offset: 130, ignored_data: blocked.example}
+# sni_offset is measured from the start of the TLS record to the hostname.
 # -prepare-sni writes only a logical schedule; execution requires -capture-iface.
 # TCP-only alternative: set tcp_only: true and tcp_timeout_ms: 5000;
 # omit both sni and paired_sni. No application data is sent.

@@ -27,12 +27,22 @@ type PreparedTLS struct {
 
 // PrepareTLS constructs a fresh TLS ClientHello without opening a socket.
 func PrepareTLS(ctx context.Context, sni string, roots *x509.CertPool) (*PreparedTLS, error) {
+	gate := newGatedConn()
+	client := tls.Client(gate, &tls.Config{ServerName: sni, RootCAs: roots})
+	return prepareTLS(ctx, gate, func(ctx context.Context) TLSObservation {
+		if err := client.HandshakeContext(ctx); err != nil {
+			return TLSObservation{Stage: "tls", Error: err.Error()}
+		}
+		state := client.ConnectionState()
+		return TLSObservation{Stage: "complete", Version: state.Version, CipherSuite: state.CipherSuite}
+	})
+}
+
+func prepareTLS(ctx context.Context, gate *gatedConn, handshake func(context.Context) TLSObservation) (*PreparedTLS, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	gate := newGatedConn()
-	client := tls.Client(gate, &tls.Config{ServerName: sni, RootCAs: roots})
 	p := &PreparedTLS{conn: gate, result: make(chan TLSObservation, 1), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(p.done)
@@ -41,12 +51,7 @@ func PrepareTLS(ctx context.Context, sni string, roots *x509.CertPool) (*Prepare
 				p.result <- TLSObservation{Stage: "tls", Error: fmt.Sprintf("TLS handshake panic: %v", v)}
 			}
 		}()
-		if err := client.HandshakeContext(ctx); err != nil {
-			p.result <- TLSObservation{Stage: "tls", Error: err.Error()}
-			return
-		}
-		state := client.ConnectionState()
-		p.result <- TLSObservation{Stage: "complete", Version: state.Version, CipherSuite: state.CipherSuite}
+		p.result <- handshake(ctx)
 	}()
 	select {
 	case hello := <-gate.first:
