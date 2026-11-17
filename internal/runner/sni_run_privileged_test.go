@@ -5,6 +5,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcapgo"
+	"github.com/semrosin/DPIsect/internal/sender"
 	"gopkg.in/yaml.v3"
 )
 
@@ -85,6 +87,57 @@ func TestSNIComparisonCapturesLoopback(t *testing.T) {
 		if !ok {
 			t.Errorf("planned ClientHello %d was not found in loopback capture", i)
 		}
+	}
+}
+
+func TestB07ShapedPairCompletesUnderRateLimitLoopback(t *testing.T) {
+	dir := t.TempDir()
+	server := httptest.NewUnstartedServer(nil)
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	cert := server.Certificate()
+	roots := x509.NewCertPool()
+	roots.AddCert(cert)
+	sni := cert.DNSNames[0]
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var sessions []*sender.PreparedTLS
+	for _, offset := range []int{110, 130} {
+		p, err := sender.PrepareShapedTLS(ctx, sni, roots, sender.HelloShape{RecordLength: 250, SNIOffset: offset})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessions = append(sessions, p)
+	}
+	defer func() {
+		for _, p := range sessions {
+			p.Close()
+		}
+	}()
+	source, err := newAFPacketWireSource("lo", filepath.Join(dir, "client.pcap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.stop()
+	retry := 1
+	budget, err := newWireBudget("127.0.0.1", server.Listener.Addr().(*net.TCPAddr).Port,
+		Budget{MaxPackets: 100, MaxBytes: 102400, MaxRatePPS: 10, MaxSYNRetransmissions: &retry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := 0
+	probe := func(ctx context.Context, addr, _ string) sender.TLSObservation {
+		p := sessions[index]
+		index++
+		defer p.Close()
+		return p.StartAfter(ctx, addr, 1100*time.Millisecond)
+	}
+	trials, err := runMonitoredSNITrials(ctx, server.Listener.Addr().String(), []string{sni, sni}, 5*time.Second, 3*time.Second, probe, source, budget)
+	if err != nil {
+		t.Fatalf("monitored pair: %v; trials: %+v", err, trials)
+	}
+	if len(trials) != 2 || trials[0].Observation.Stage != "complete" || trials[1].Observation.Stage != "complete" {
+		t.Fatalf("TLS trials: %+v", trials)
 	}
 }
 
