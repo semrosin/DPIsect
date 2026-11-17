@@ -106,6 +106,25 @@ func TestMonitorWireCancelsOnLimitOrCaptureLoss(t *testing.T) {
 	}
 }
 
+func TestMonitorWireCancelsAndRecordsFINRetransmission(t *testing.T) {
+	t.Parallel()
+
+	fin := testTCPDataFrame(t, 50000, 100, nil, true)
+	source := &fakeWireSource{frames: [][]byte{fin, fin}}
+	budget, err := newWireBudget("192.0.2.10", 443, Budget{MaxPackets: 100, MaxBytes: 10000, MaxRatePPS: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := monitorWire(ctx, source, budget, cancel); err == nil || !strings.Contains(err.Error(), "retransmission") {
+		t.Fatalf("FIN retransmission error = %v", err)
+	}
+	if !errors.Is(ctx.Err(), context.Canceled) || len(source.recorded) != 2 {
+		t.Fatalf("context error = %v, recorded frames = %d", ctx.Err(), len(source.recorded))
+	}
+}
+
 type channelWireSource struct {
 	frames chan []byte
 }
