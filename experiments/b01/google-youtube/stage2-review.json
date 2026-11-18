@@ -1,0 +1,235 @@
+[
+  {
+    "experiment_id": "b01-google-youtube-sni-2026-11",
+    "started_utc": "2026-11-17T14:24:02.545568197Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "6ad8e7aca897dce3e7dbd4dfc7c037a72209de81bd56fa67fa86af013a1ba0bc",
+    "run_sha256": "e9230c8b2498bd9fb200f5807802c6f5f254ed112e109d8db95a618a960db732",
+    "planned_attempts": 2,
+    "unstarted_attempts": 0,
+    "pcap_frames": 22,
+    "pcap_ethernet_bytes": 5080,
+    "reported_capture_drops": 0,
+    "stop_reason": "wire budget: outgoing data or FIN retransmission detected",
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 45406,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      },
+      {
+        "sni": "www.youtube.com",
+        "client_port": 38680,
+        "tcp_handshake_observed": true,
+        "stage": "tls",
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 0,
+        "identical_hello_repeats": 1,
+        "first_hello_repeat_delay_ms": 385.061
+      }
+    ]
+  },
+  {
+    "experiment_id": "b01-google-youtube-repeat-2026-11",
+    "started_utc": "2026-11-18T16:22:55.438905602Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "aa982390ad9d38509a66058d88fe39b695fc2e00b9f16fdf204d2ef97122d761",
+    "run_sha256": "b60bb5b450670c41609466536e055272423c2352218cf1a047834bb55301e2f3",
+    "planned_attempts": 4,
+    "unstarted_attempts": 2,
+    "pcap_frames": 22,
+    "pcap_ethernet_bytes": 5079,
+    "reported_capture_drops": 0,
+    "stop_reason": "wire budget: outgoing data or FIN retransmission detected",
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 52752,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      },
+      {
+        "sni": "www.youtube.com",
+        "client_port": 52030,
+        "tcp_handshake_observed": true,
+        "stage": "tls",
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 0,
+        "identical_hello_repeats": 1,
+        "first_hello_repeat_delay_ms": 281.023
+      }
+    ]
+  },
+  {
+    "experiment_id": "b02-google-youtube-compact-2026-11",
+    "started_utc": "2026-11-17T11:06:56.087680567Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "de9970800c2f543ee183b259e696f99227c0e2f947fc3fb6067b55f6506134e8",
+    "run_sha256": "d056a8af87dab587dc3831457ac8ef640f9f8652acfaaab2f4daaa7756c0e9d7",
+    "planned_attempts": 2,
+    "unstarted_attempts": 0,
+    "pcap_frames": 20,
+    "pcap_ethernet_bytes": 5055,
+    "reported_capture_drops": 0,
+    "stop_reason": "wire budget: outgoing data or FIN retransmission detected",
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 50444,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 772,
+        "hello_length": 292,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 5,
+        "identical_hello_repeats": 0
+      },
+      {
+        "sni": "www.youtube.com",
+        "client_port": 45774,
+        "tcp_handshake_observed": true,
+        "stage": "tls",
+        "hello_length": 293,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 0,
+        "identical_hello_repeats": 1,
+        "first_hello_repeat_delay_ms": 436.748
+      }
+    ]
+  },
+  {
+    "experiment_id": "b04-google-youtube-field-2026-11",
+    "started_utc": "2026-11-17T12:11:30.917859411Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "cb28ad6311c5e1edc8a6e9852e351a1b97e485d3b05ab38a7d6129c4eecf369a",
+    "run_sha256": "55fbbe4c727954e0975c2f3762dd8317c8359c72bcf62638ac0a081cde3a7728",
+    "planned_attempts": 2,
+    "unstarted_attempts": 1,
+    "pcap_frames": 5,
+    "pcap_ethernet_bytes": 866,
+    "reported_capture_drops": 0,
+    "stop_reason": "wire budget: outgoing data or FIN retransmission detected",
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 49332,
+        "tcp_handshake_observed": true,
+        "stage": "tls",
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 0,
+        "identical_hello_repeats": 1,
+        "first_hello_repeat_delay_ms": 314.672
+      }
+    ]
+  },
+  {
+    "experiment_id": "b07-google-offset-paced-2026-11",
+    "started_utc": "2026-11-17T12:11:05.775348737Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "b0856b01b8578a5dba61a849bfdc96104e98e5a5ec4a3200cf11ed5c277bea57",
+    "run_sha256": "563d066a41ee953ddd3e29d1c960bd76ef6060d6c24981bcc976a0802493c9a9",
+    "planned_attempts": 2,
+    "unstarted_attempts": 0,
+    "pcap_frames": 34,
+    "pcap_ethernet_bytes": 8427,
+    "reported_capture_drops": 0,
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 59668,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      },
+      {
+        "sni": "www.google.com",
+        "client_port": 42370,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      }
+    ]
+  },
+  {
+    "experiment_id": "b07-google-length-2026-11",
+    "started_utc": "2026-11-17T12:11:18.275504812Z",
+    "endpoint": {
+      "ip": "142.251.155.119",
+      "port": 443
+    },
+    "verified_artifact_hashes": 3,
+    "plan_sha256": "cab3ed3511796830d1cbf6450b5bc740b4bf06108870b1092809edae03443bec",
+    "run_sha256": "7e71f20e30fe1e38bda3c710c1acff5e40db45c03df7b3f081649c39700e8427",
+    "planned_attempts": 2,
+    "unstarted_attempts": 0,
+    "pcap_frames": 34,
+    "pcap_ethernet_bytes": 8469,
+    "reported_capture_drops": 0,
+    "trials": [
+      {
+        "sni": "www.google.com",
+        "client_port": 44626,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 260,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      },
+      {
+        "sni": "www.google.com",
+        "client_port": 44634,
+        "tcp_handshake_observed": true,
+        "stage": "complete",
+        "tls_version": 771,
+        "hello_length": 300,
+        "plan_matches": true,
+        "incoming_frames_after_hello": 6,
+        "identical_hello_repeats": 0
+      }
+    ]
+  }
+]
