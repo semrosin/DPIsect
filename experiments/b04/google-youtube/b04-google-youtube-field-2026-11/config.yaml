@@ -1,0 +1,27 @@
+question_id: B04
+experiment_id: b04-google-youtube-field-2026-11
+mode: valid-session
+sni: www.google.com
+paired_sni: www.youtube.com
+paired_timeout_ms: 5000
+paired_client_hello_delay_ms: 1100
+paired_close_delay_ms: 1100
+paired_hello:
+  control: {record_length: 260, sni_offset: 110, ignored_data: www.youtube.com}
+  treatment: {record_length: 260, sni_offset: 110, ignored_data: www.google.com}
+endpoint: {role: target, ip: 142.251.155.119, port: 443}
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  max_syn_retransmissions: 1
+  stop_conditions: [first repeated SYN, outgoing data or FIN retransmission, budget threshold, capture error or drops, abnormal channel behavior, SIGINT]
+schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none}
+capture: {client: artifacts/b04-google-youtube-field-2026-11/client.pcap}
+runner_log: artifacts/b04-google-youtube-field-2026-11/runner.log
+classification_rule: |
+  This is one target feasibility pair, not sufficient to establish a reproducible
+  effect or device attribution. Record each result, certificate validation and
+  capture limitations. An interrupted series or missing server observation
+  leaves the question inconclusive; do not interpret an unstarted trial.

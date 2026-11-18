@@ -35,6 +35,8 @@ func run(args []string) error {
 	configPath := fs.String("config", "", "path to experiment config.yaml")
 	finalize := fs.Bool("finalize", false,
 		"after stopping helper, add final server artifact hashes to run.json")
+	prepareSNI := fs.Bool("prepare-sni", false,
+		"write a paired SNI schedule without sending packets")
 	allowRaw := fs.Bool("allow-raw", false,
 		"explicit confirmation for a raw-experiment run (docs/SAFETY.md §1)")
 	operator := fs.String("operator", "",
@@ -51,6 +53,20 @@ func run(args []string) error {
 	}
 	if *configPath == "" {
 		return errors.New("-config is required")
+	}
+	if *prepareSNI {
+		if *finalize || *allowRaw || *operator != "" || *captureIface != "" {
+			return errors.New("-prepare-sni cannot be combined with send, capture or finalize options")
+		}
+		cfg, err := runner.Load(*configPath)
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		if err := runner.PrepareSNIComparison(cfg, *configPath); err != nil {
+			return fmt.Errorf("prepare SNI comparison: %w", err)
+		}
+		fmt.Println("SNI schedule prepared; packet plan is generated before execution")
+		return nil
 	}
 	if *finalize && (*allowRaw || *operator != "" || *captureIface != "") {
 		return errors.New("-finalize cannot be combined with send or capture options")

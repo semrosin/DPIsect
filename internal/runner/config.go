@@ -26,7 +26,7 @@ const (
 var ErrNotImplemented = errors.New("run not implemented yet (stage 1, docs/DEVELOPMENT.md)")
 
 // Config is the experiment run configuration loaded from
-// experiments/<experiment_id>/config.yaml. The schema is mirrored by
+// experiments/<question_id>/<series>/<experiment_id>/config.yaml. The schema is mirrored by
 // docs/config.example.yaml; report front-matter — docs/EXPERIMENTS.md §4.
 type Config struct {
 	QuestionID   string `yaml:"question_id"`
@@ -34,19 +34,45 @@ type Config struct {
 	Mode         string `yaml:"mode"`
 	// SNI is the host name put into the ClientHello of a
 	// valid-session run; raw plans carry their own bytes.
-	SNI       string       `yaml:"sni"`
-	Endpoint  Endpoint     `yaml:"endpoint"`
-	Budget    Budget       `yaml:"budget"`
-	Schedule  Schedule     `yaml:"schedule"`
-	Capture   CapturePaths `yaml:"capture"`
-	HelperLog string       `yaml:"helper_log"`
-	RunnerLog string       `yaml:"runner_log"`
+	SNI string `yaml:"sni"`
+	// PairedSNI requests a paired comparison; SNI is the control name.
+	PairedSNI string `yaml:"paired_sni,omitempty"`
+	// PairedTimeoutMS bounds each TCP/TLS attempt.
+	PairedTimeoutMS int `yaml:"paired_timeout_ms,omitempty"`
+	// PairedClientHelloDelayMS delays TLS after TCP connects in paired runs.
+	PairedClientHelloDelayMS int `yaml:"paired_client_hello_delay_ms,omitempty"`
+	// PairedCloseDelayMS holds successful connections before closing.
+	PairedCloseDelayMS int `yaml:"paired_close_delay_ms,omitempty"`
+	// PairedHello enables independently shaped ClientHellos for B04/B07.
+	PairedHello *PairedHello `yaml:"paired_hello,omitempty"`
+	// TCPOnly runs ordinary TCP connectivity controls without application data.
+	TCPOnly      bool         `yaml:"tcp_only,omitempty"`
+	TCPTimeoutMS int          `yaml:"tcp_timeout_ms,omitempty"`
+	Endpoint     Endpoint     `yaml:"endpoint"`
+	Budget       Budget       `yaml:"budget"`
+	Schedule     Schedule     `yaml:"schedule"`
+	Capture      CapturePaths `yaml:"capture"`
+	HelperLog    string       `yaml:"helper_log"`
+	RunnerLog    string       `yaml:"runner_log"`
 	// ClassificationRule must be fixed before the first packet is
 	// sent (docs/EXPERIMENTS.md §2); the verdict is set by the
 	// operator/agent, not by the analyzer (docs/EXPERIMENTS.md §7).
 	ClassificationRule string    `yaml:"classification_rule"`
 	Preflight          Preflight `yaml:"preflight"`
 	Lab                Lab       `yaml:"lab"`
+}
+
+// HelloVariant defines exact ClientHello coordinates and ignored bytes.
+type HelloVariant struct {
+	RecordLength int    `yaml:"record_length"`
+	SNIOffset    int    `yaml:"sni_offset"`
+	IgnoredData  string `yaml:"ignored_data"`
+}
+
+// PairedHello specifies the control and treatment wire layouts.
+type PairedHello struct {
+	Control   HelloVariant `yaml:"control"`
+	Treatment HelloVariant `yaml:"treatment"`
 }
 
 // Endpoint is the single destination of the run.
@@ -64,6 +90,9 @@ type Budget struct {
 	MaxRatePPS     int      `yaml:"max_rate_pps"`
 	MaxDurationS   int      `yaml:"max_duration_s"`
 	StopConditions []string `yaml:"stop_conditions"`
+	// MaxSYNRetransmissions is the per-connection observed retry threshold.
+	// A nil value preserves historical configurations but cannot run paired probes.
+	MaxSYNRetransmissions *int `yaml:"max_syn_retransmissions,omitempty"`
 }
 
 // Schedule controls repetitions and randomness of a run.
@@ -142,6 +171,12 @@ func Load(path string) (Config, error) {
 // applyDefaults fills zero budget fields with docs/SAFETY.md §3
 // starting limits (docs/EXPERIMENTS.md §4).
 func (c *Config) applyDefaults() {
+	if c.PairedSNI != "" && c.PairedTimeoutMS == 0 {
+		c.PairedTimeoutMS = 5000
+	}
+	if c.TCPOnly && c.TCPTimeoutMS == 0 {
+		c.TCPTimeoutMS = 5000
+	}
 	d := DefaultBudget()
 	if c.Budget.MaxPackets == 0 {
 		c.Budget.MaxPackets = d.MaxPackets
@@ -184,9 +219,105 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf(
 			"endpoint.role %q must be lab, helper or target", c.Endpoint.Role))
 	}
-	if modeErr == nil && mode == generator.ValidSession && c.SNI == "" {
+	if modeErr == nil && mode == generator.ValidSession && !c.TCPOnly && c.SNI == "" {
 		errs = append(errs, errors.New(
 			"sni is required for a valid-session run (ClientHello)"))
+	}
+	if c.TCPOnly {
+		if modeErr == nil && mode != generator.ValidSession {
+			errs = append(errs, errors.New("tcp_only requires valid-session mode"))
+		}
+		if c.SNI != "" || c.PairedSNI != "" {
+			errs = append(errs, errors.New("tcp_only does not accept SNI fields"))
+		}
+		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
+			errs = append(errs, errors.New("tcp_only requires an IPv4 endpoint"))
+		}
+		if c.TCPTimeoutMS <= 0 || int64(c.TCPTimeoutMS) > int64(c.Budget.MaxDurationS)*1000 {
+			errs = append(errs, errors.New("tcp_timeout_ms must be positive and within the series duration"))
+		}
+		if c.Schedule.InterTrialGapMS < 0 || (c.Schedule.StateReset != "" && c.Schedule.StateReset != "none") {
+			errs = append(errs, errors.New("tcp_only requires a nonnegative gap and state_reset: none"))
+		}
+		if c.Schedule.Repetitions > c.Budget.MaxPackets {
+			errs = append(errs, errors.New("TCP attempts exceed packet budget before overhead"))
+		}
+		if c.Endpoint.Role == RoleTarget {
+			limits := DefaultBudget()
+			if c.Budget.MaxPackets > limits.MaxPackets || c.Budget.MaxBytes > limits.MaxBytes ||
+				c.Budget.MaxRatePPS > limits.MaxRatePPS || c.Budget.MaxDurationS > limits.MaxDurationS {
+				errs = append(errs, errors.New("TCP target budget exceeds target limits"))
+			}
+		}
+	}
+	if (c.TCPOnly || c.PairedSNI != "") && (c.Preflight.Enabled || c.Lab.Enabled) {
+		errs = append(errs, errors.New("TCP and paired SNI runs do not support preflight or lab profiles"))
+	}
+	if c.PairedSNI == "" && c.PairedClientHelloDelayMS != 0 {
+		errs = append(errs, errors.New("paired_client_hello_delay_ms requires paired_sni"))
+	}
+	if c.PairedSNI == "" && c.PairedCloseDelayMS != 0 {
+		errs = append(errs, errors.New("paired_close_delay_ms requires paired_sni"))
+	}
+	if c.PairedSNI == "" && c.PairedTimeoutMS != 0 {
+		errs = append(errs, errors.New("paired_timeout_ms requires paired_sni"))
+	}
+	if !c.TCPOnly && c.TCPTimeoutMS != 0 {
+		errs = append(errs, errors.New("tcp_timeout_ms requires tcp_only"))
+	}
+	if c.PairedHello != nil {
+		if c.PairedSNI == "" || c.TCPOnly {
+			errs = append(errs, errors.New("paired_hello requires paired_sni"))
+		}
+		for _, v := range []HelloVariant{c.PairedHello.Control, c.PairedHello.Treatment} {
+			if v.RecordLength <= 0 || v.RecordLength > 5+(1<<14) || v.SNIOffset <= 0 || v.SNIOffset >= v.RecordLength || len(v.IgnoredData) > 253 {
+				errs = append(errs, errors.New("paired_hello requires valid record lengths, SNI offsets and ignored data"))
+			}
+		}
+		if strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
+			errs = append(errs, errors.New("paired_hello variants must differ when SNI is identical"))
+		}
+	}
+	if c.PairedSNI != "" {
+		if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
+			errs = append(errs, errors.New("paired SNI requires an IPv4 endpoint"))
+		}
+		if c.Schedule.StateReset != "" && c.Schedule.StateReset != "none" {
+			errs = append(errs, errors.New("paired SNI supports only state_reset: none"))
+		}
+		if c.PairedTimeoutMS <= 0 || int64(c.PairedTimeoutMS) > int64(c.Budget.MaxDurationS)*1000 {
+			errs = append(errs, errors.New("paired_timeout_ms must be positive and within the series duration"))
+		}
+		if c.PairedClientHelloDelayMS < 0 || c.PairedClientHelloDelayMS >= c.PairedTimeoutMS {
+			errs = append(errs, errors.New("paired_client_hello_delay_ms must be nonnegative and shorter than paired_timeout_ms"))
+		}
+		if c.PairedCloseDelayMS < 0 || int64(c.PairedCloseDelayMS)+int64(c.PairedClientHelloDelayMS) >= int64(c.PairedTimeoutMS) {
+			errs = append(errs, errors.New("paired_close_delay_ms must be nonnegative and both delays must fit within paired_timeout_ms"))
+		}
+		if modeErr == nil && mode != generator.ValidSession {
+			errs = append(errs, errors.New("paired_sni requires valid-session mode"))
+		}
+		if _, err := pairedSNIScheduleFor(c.SNI, c.PairedSNI, 1, c.PairedHello != nil); err != nil {
+			errs = append(errs, err)
+		}
+		if c.Schedule.Repetitions > c.Budget.MaxPackets/2 {
+			errs = append(errs, errors.New("paired attempts exceed packet budget before TCP overhead"))
+		}
+		for _, name := range []string{c.SNI, c.PairedSNI} {
+			if _, err := generator.BuildClientHello(name, [32]byte{}); err != nil {
+				errs = append(errs, fmt.Errorf("invalid paired SNI: %w", err))
+			}
+		}
+		if c.Schedule.InterTrialGapMS < 0 {
+			errs = append(errs, errors.New("paired inter_trial_gap_ms must not be negative"))
+		}
+		if c.Endpoint.Role == RoleTarget {
+			limits := DefaultBudget()
+			if c.Budget.MaxPackets > limits.MaxPackets || c.Budget.MaxBytes > limits.MaxBytes ||
+				c.Budget.MaxRatePPS > limits.MaxRatePPS || c.Budget.MaxDurationS > limits.MaxDurationS {
+				errs = append(errs, errors.New("paired target budget exceeds target limits"))
+			}
+		}
 	}
 	if modeErr == nil && mode == generator.RawExperiment && c.Endpoint.Role == RoleTarget {
 		errs = append(errs, errors.New(
@@ -211,6 +342,9 @@ func (c Config) Validate() error {
 	if c.Budget.MaxDurationS <= 0 {
 		errs = append(errs, errors.New("budget.max_duration_s must be positive"))
 	}
+	if c.Budget.MaxSYNRetransmissions != nil && *c.Budget.MaxSYNRetransmissions <= 0 {
+		errs = append(errs, errors.New("budget.max_syn_retransmissions must be positive"))
+	}
 
 	if c.Schedule.Repetitions < 1 {
 		errs = append(errs, errors.New("schedule.repetitions must be at least 1"))
@@ -219,7 +353,7 @@ func (c Config) Validate() error {
 	if c.Capture.Client == "" {
 		errs = append(errs, errors.New("capture.client path is required"))
 	}
-	if c.Capture.Server == "" {
+	if c.Capture.Server == "" && !((c.PairedSNI != "" || c.TCPOnly) && c.Endpoint.Role == RoleTarget) {
 		errs = append(errs, errors.New("capture.server path is required"))
 	}
 	if c.RunnerLog == "" {

@@ -1,5 +1,5 @@
 # Example experiment config. Copy to
-# experiments/<experiment_id>/config.yaml and edit.
+# experiments/<question_id>/<series>/<experiment_id>/config.yaml and edit.
 # Schema: internal/runner (Config); report front-matter:
 # docs/EXPERIMENTS.md §4; safety limits: docs/SAFETY.md §3.
 
@@ -7,6 +7,18 @@ question_id: B01
 experiment_id: b01-sni-padding-2026-11
 mode: valid-session # valid-session | raw-experiment
 sni: example.com # ClientHello SNI (required for valid-session)
+# paired_sni: web.telegram.org # optional treatment; sni is the control
+# schedule.repetitions becomes the number of pairs for offline preparation.
+# paired_timeout_ms: 5000 # per-attempt TCP/TLS deadline
+# paired_client_hello_delay_ms: 1100 # optional delay after TCP; shorter than timeout
+# paired_close_delay_ms: 1100 # optional pause after successful TLS; both delays fit the timeout
+# paired_hello: # optional B04/B07 TLS 1.2 profile; both coordinates are bytes
+#   control: {record_length: 250, sni_offset: 110, ignored_data: blocked.example}
+#   treatment: {record_length: 250, sni_offset: 130, ignored_data: blocked.example}
+# sni_offset is measured from the start of the TLS record to the hostname.
+# -prepare-sni writes only a logical schedule; execution requires -capture-iface.
+# TCP-only alternative: set tcp_only: true and tcp_timeout_ms: 5000;
+# omit both sni and paired_sni. No application data is sent.
 
 endpoint:
   role: helper # lab | helper | target (raw is forbidden for target)
@@ -18,6 +30,7 @@ budget: # zero fields default to docs/SAFETY.md §3 limits
   max_bytes: 102400
   max_rate_pps: 10
   max_duration_s: 60
+  max_syn_retransmissions: 1 # required for TCP-only and paired runs
   stop_conditions: []
 
 schedule:

@@ -30,11 +30,11 @@ config.yaml
   → capture ×2         (client PCAP + server PCAP → artifacts/)
   → observations       (PCAP, dns_log, runner_log, helper_log)
   → dpi-analyze        (измерения + классификация причин H01)
-  → run.json           (experiments/<experiment_id>/, пишет runner)
-  → report.md          (experiments/<experiment_id>/, оператор/агент)
+  → run.json           (experiments/<question_id>/<series>/<experiment_id>/, пишет runner)
+  → report.md          (experiments/<question_id>/<series>/<experiment_id>/, оператор/агент)
 ```
 
-`plan.yaml` фиксируется в `experiments/<experiment_id>/` до отправки
+`plan.yaml` фиксируется в `experiments/<question_id>/<series>/<experiment_id>/` до отправки
 первого пакета; сверка planned vs actual — в измерениях analyzer
 (`EXPERIMENTS.md` §3). Поля отчёта — `EXPERIMENTS.md` §4; семантика
 исходов и автор вердикта — `EXPERIMENTS.md` §7.
@@ -61,6 +61,9 @@ config.yaml
 | `PlannedWirePacket` | generator → runner | Логические байты, TCP split offsets, TLS record layout, TTL/SEQ/ACK/checksum, тайминг `SendAfterMS` (`GO_STYLE.md` §3) |
 | Запуск/останов capture | runner → capture | Точка захвата, путь файла, время окна |
 | Отправка | runner → sender | По одному пакету плана; raw-путь — только при установленном флаге и подтверждении; бюджет и kill switch — на стороне runner (`SAFETY.md` §3) |
+| Парное TLS-подключение | runner → sender | Для каждой попытки sender устанавливает новое TCP-соединение с фиксированным endpoint, при заданной паузе после TCP откладывает ClientHello, выполняет TLS-handshake с заданным SNI и проверкой сертификата, возвращает стадию, ошибку и параметры завершённой сессии; runner сохраняет порядок и наблюдения. Этот путь не использует raw-пакеты |
+| Управляемый ClientHello | runner → sender | Необязательные профили control и treatment задают длину TLS-записи, смещение первого байта имени SNI и данные частного расширения. Sender готовит точные байты до подключения и выполняет TLS 1.2 с проверкой сертификата; одинаковое SNI разрешено для разных профилей |
+| Контроль TCP | runner → sender | Обычный TCP dial к одному фиксированному endpoint с таймаутом и закрытием соединения; прикладные данные не отправляются. До подключения сохраняется план действий, capture и бюджет используются как в парном режиме |
 | Preflight | runner → dnsprobe | Имя для резолва, независимый резолвер, endpoint; результаты — в observations (`dns_log`) |
 | План пакетов | runner → `plan.yaml` | Персистентность плана до первого пакета (`EXPERIMENTS.md` §2) |
 | Метаданные прогона | runner → `run.json` | Версии, seed, UTC-времена, оператор и хэши закрытых клиентских артефактов; после остановки helper команда `dpi-prober -finalize -config <config.yaml>` добавляет окончательные хэши серверных файлов (`H07`) |
@@ -79,6 +82,15 @@ PCAP и журнал по путям из конфига; затем запус�
 пакета; analyzer его не применяет. `analyzer` читает только артефакты;
 обратной связи в sender нет.
 
+Парный режим сохраняет до подключения `plan.yaml` с точным первым
+ClientHello каждой TLS-сессии. Сообщения после него зависят от ответа
+сервера, TCP-сегментацией и ретрансляциями управляет ядро. Обязательный
+клиентский capture учитывает наблюдаемые TCP-кадры endpoint в обоих
+направлениях, останавливает серию на лимите или ошибке и сохраняет только
+подходящие кадры. Учёт асинхронен: уже отправленные пакеты нельзя отозвать,
+а потери capture и offload ограничивают выводы о физической линии. Наблюдения
+и причина остановки сохраняются вне git, их хэш — в `run.json`.
+
 ## 5. Бинари и каталоги
 
 - `cmd/dpi-prober` — клиент эксперимента (preflight, generator, runner,
@@ -88,7 +100,7 @@ PCAP и журнал по путям из конфига; затем запус�
 - `internal/` — все внутренние пакеты, включая `lab`, `dnsprobe`,
   `sender`.
 - `testdata/` — размеченные fixtures с известными причинами.
-- `experiments/<experiment_id>/` — в git: `config.yaml`, `plan.yaml`,
+- `experiments/<question_id>/<series>/<experiment_id>/` — в git: `config.yaml`, `plan.yaml`,
   `run.json`, `report.md`; при включённом preflight — также
   `dns_log.yaml`.
 - `artifacts/` — сырые PCAP и логи (вне git; `SAFETY.md` §5).
@@ -100,8 +112,11 @@ PCAP и журнал по путям из конфига; затем запус�
 - `golang.org/x/sys/unix` — raw-сокеты и syscall-доступ на Linux.
 - `gopkg.in/yaml.v3` — загрузка `config.yaml` опыта
   (`docs/config.example.yaml`).
+- `github.com/refraction-networking/utls` v1.8.2 — управляемый ClientHello
+  с полноценным TLS 1.2 для B04/B07; решение пользователя, лицензия
+  BSD-3-Clause. Транзитивные зависимости зафиксированы в `go.mod`.
 
-Все три — зафиксированные исключения в правило «новая зависимость —
+Эти зависимости — зафиксированные исключения в правило «новая зависимость —
 сначала спросить» (`AGENTS.md` §Границы); критерии допуска и
 обоснование выбора — `GO_STYLE.md` §8.
 

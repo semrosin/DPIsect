@@ -1,0 +1,11 @@
+experiment_id: b02-x-sni-again-2026-11
+endpoint:
+    role: target
+    ip: 172.66.0.227
+    port: 443
+sni_schedule:
+    - x.com
+    - example.com
+inter_trial_gap_ms: 3000
+trial_timeout_ms: 5000
+execution_ready: false

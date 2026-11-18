@@ -15,6 +15,10 @@ const maxSNIHostLen = 253
 // The function never returns malformed output — that is the contract
 // of the valid path.
 func BuildClientHello(sni string, rnd [32]byte) ([]byte, error) {
+	return buildClientHello(sni, rnd)
+}
+
+func buildClientHello(sni string, rnd [32]byte) ([]byte, error) {
 	if err := validateSNI(sni); err != nil {
 		return nil, err
 	}

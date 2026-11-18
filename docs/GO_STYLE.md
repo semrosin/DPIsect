@@ -150,11 +150,13 @@ Baseline: [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments),
 - Критерии допуска: активная поддержка, приемлемая лицензия, отсутствие
   cgo (если не требуется для задачи), разумный размер.
 - Фиксированная версия в `go.mod`; обоснование выбора — в PR.
+- `github.com/refraction-networking/utls` v1.8.2 для B04/B07 согласован
+  пользователем; зависимости и версии фиксируются в `go.mod` / `go.sum`.
 
 Секреты и конфигурация:
 
 - Не хранить в коде и в git: ключи, `SSLKEYLOGFILE`, токены.
-- Конфиги экспериментов — в `experiments/<experiment_id>/` или в `docs/`
+- Конфиги экспериментов — в `experiments/<question_id>/<series>/<experiment_id>/` или в `docs/`
   (если это шаблон, а не результат); шаблон — `docs/config.example.yaml`.
 - `*.pcap*`, `*.key`, `SSLKEYLOGFILE` — в `.gitignore`.
 

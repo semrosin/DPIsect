@@ -1,0 +1,13 @@
+experiment_id: b02-telegram-sni-pilot-2026-11
+endpoint:
+    role: target
+    ip: 149.154.167.99
+    port: 443
+sni_schedule:
+    - www.telegram.org
+    - web.telegram.org
+    - web.telegram.org
+    - www.telegram.org
+inter_trial_gap_ms: 3000
+trial_timeout_ms: 5000
+execution_ready: false

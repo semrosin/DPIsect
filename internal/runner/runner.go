@@ -75,6 +75,11 @@ func defaultDependencies() dependencies {
 // then preflight, plan persistence, capture and the budgeted send
 // loop, finishing with run.json (docs/ARCHITECTURE.md §2).
 func Run(ctx context.Context, cfg Config, opts Options) error {
+	if cfg.PairedSNI != "" || cfg.TCPOnly {
+		return runObservedSeries(ctx, cfg, opts, func(iface, path string) (pairWireSource, error) {
+			return newAFPacketWireSource(iface, path)
+		})
+	}
 	mode, err := cfg.GeneratorMode()
 	if err != nil {
 		return fmt.Errorf("resolve mode: %w", err)

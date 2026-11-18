@@ -1,0 +1,2 @@
+# Keep Go sources compatible with gofmt regardless of local Git settings.
+*.go text eol=lf

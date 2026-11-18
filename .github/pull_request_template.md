@@ -42,9 +42,9 @@ ok
 - `experiment_id`: 
 - Тег: `exp/<experiment_id>`
 - Статус: `planned` | `in_progress` | `confirmed` | `refuted` | `inconclusive`
-- Отчёт: `experiments/<experiment_id>/report.md`
+- Отчёт: `experiments/<question_id>/<series>/<experiment_id>/report.md`
 - PCAP: вне git; `sha256` записан в отчёте
-- `config_file`: `experiments/<experiment_id>/config.yaml` (без секретов)
+- `config_file`: `experiments/<question_id>/<series>/<experiment_id>/config.yaml` (без секретов)
 
 ## Критерии готовности (`AGENTS.md`)
 
