@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -342,5 +343,73 @@ func TestSNIComparisonStopsAtObservedLimit(t *testing.T) {
 	}
 	if obs.ObservedPackets != 1 || len(obs.Trials) > 1 || obs.StopReason == "" {
 		t.Fatalf("observations = %+v; want limit and no second trial", obs)
+	}
+}
+
+func TestC01SplitSeriesCapturesLoopback(t *testing.T) {
+	dir := t.TempDir()
+	server := httptest.NewUnstartedServer(nil)
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	addr := server.Listener.Addr().(*net.TCPAddr)
+	content := runConfigYAML("127.0.0.1", addr.Port, 1, 100, dir) + `paired_sni: control.example
+paired_split: {control: 32, treatment: 0}
+`
+	content = strings.Replace(content, "question_id: H01", "question_id: C01", 1)
+	content = strings.Replace(content, "experiment_id: h01-", "experiment_id: c01-", 1)
+	configPath := writeRunConfig(t, dir, content)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Budget.MaxRatePPS = 100
+	cfg.Budget.StopConditions = []string{"budget limit", "capture failure", "SIGINT"}
+	maxRetries := 3
+	cfg.Budget.MaxSYNRetransmissions = &maxRetries
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	open := func(iface, path string) (pairWireSource, error) {
+		return newAFPacketWireSource(iface, path)
+	}
+	if err := runObservedSeries(ctx, cfg, Options{ConfigPath: configPath, CaptureIface: "lo", Operator: "tester"}, open); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "plan.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan sniWirePlan
+	if err := yaml.Unmarshal(data, &plan); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(dir, "client.pcap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	r, err := pcapgo.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello := plan.Trials[0].Packet.Payload
+	first, second := false, false
+	for {
+		frame, _, err := r.ReadPacketData()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		packet := gopacket.NewPacket(frame, layers.LayerTypeEthernet, gopacket.NoCopy)
+		tcp, ok := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
+		if !ok {
+			continue
+		}
+		first = first || bytes.Equal(tcp.Payload, hello[:32])
+		second = second || bytes.Equal(tcp.Payload, hello[32:])
+	}
+	if !first || !second {
+		t.Fatalf("captured split first=%t second=%t", first, second)
 	}
 }
