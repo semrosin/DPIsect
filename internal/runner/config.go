@@ -287,7 +287,7 @@ func (c Config) Validate() error {
 				errs = append(errs, errors.New("paired_hello requires valid record lengths, SNI offsets and ignored data"))
 			}
 		}
-		if strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
+		if c.PairedSplit == nil && strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
 			errs = append(errs, errors.New("paired_hello variants must differ when SNI is identical"))
 		}
 	}
