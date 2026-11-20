@@ -1,0 +1,20 @@
+question_id: C01
+experiment_id: c01-loopback-layout-2026-11
+endpoint: {role: lab, ip: 127.0.0.1, port: ephemeral}
+scope: "Калибровка захвата TCP и приёма байтов, с одной TLS-записью ClientHello."
+planned_wire_packets:
+  hello_fixture: 'generator.BuildClientHello("c01.example.test", [32]byte{})'
+  split_offsets_from_hello_start: [[], [76], [85], [94]]
+  tls_layout: "Один неизменный TLS record."
+  network: "TCP/IPv4 loopback. SEQ, ACK, TTL и checksum выбирает ядро."
+  pacing: "Следующая запись передаётся после чтения предыдущего диапазона приёмником."
+schedule: {repetitions: 1, seed: null, state_reset: "Новый TCP-сеанс на вариант."}
+budget:
+  max_captured_frames_per_attempt: 64
+  max_capture_frame_bytes: 65535
+  deadline_s_per_connection: 5
+  rationale: "Локальная калибровка с фиксированными четырьмя попытками и без внешнего интерфейса. Частота ограничена числом записей и чтений, отдельный лимит pps не применяется."
+  stop_conditions: ["ошибка сокета или разбора", "дедлайн", "64 кадра без маркера приёмника"]
+classification_rule:
+  calibration_pass: "Все четыре захвата показывают заданные границы TCP, без повторов диапазонов. Приложение читает идентичные исходному ClientHello байты."
+  research_result: "Симптом на исследуемом маршруте не воспроизводится на этом стенде. По вопросу C01 исход inconclusive независимо от прохождения калибровки."
