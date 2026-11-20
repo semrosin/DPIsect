@@ -21,6 +21,7 @@ type testFrame struct {
 	seq      uint32
 	flags    layers.IPv4Flag
 	syn      bool
+	rst      bool
 	incoming bool
 	payload  string
 }
@@ -47,7 +48,7 @@ func makeCapture(t *testing.T, frames []testFrame) []byte {
 		}
 		tcp := &layers.TCP{
 			SrcPort: layers.TCPPort(src.Port()), DstPort: layers.TCPPort(dst.Port()),
-			Seq: frame.seq, SYN: frame.syn, ACK: !frame.syn,
+			Seq: frame.seq, SYN: frame.syn, ACK: !frame.syn, RST: frame.rst,
 		}
 		buffer := gopacket.NewSerializeBuffer()
 		if err := gopacket.SerializeLayers(buffer, gopacket.SerializeOptions{FixLengths: true}, eth, ip, tcp, gopacket.Payload(frame.payload)); err != nil {
@@ -68,13 +69,14 @@ func TestC01InspectCapture(t *testing.T) {
 	first := testFrame{seq: 0xfffffffe, payload: "ab"}
 	second := testFrame{seq: 0, payload: "cd"}
 	ack := testFrame{incoming: true}
+	reset := testFrame{incoming: true, rst: true}
 	reply := testFrame{incoming: true, payload: "reply"}
 	for _, tc := range []struct {
 		name   string
 		frames []testFrame
 		err    string
 	}{
-		{name: "C01_in_order_with_repeat", frames: []testFrame{syn, first, second, ack, reply, second, ack}},
+		{name: "C01_in_order_with_repeat", frames: []testFrame{syn, first, second, ack, reply, reset, second, ack}},
 		{name: "C01_reversed_capture_order", frames: []testFrame{syn, second, first}},
 		{name: "C01_gap", frames: []testFrame{syn, second}, err: "missing ClientHello bytes=2"},
 		{name: "C01_mismatched_bytes", frames: []testFrame{syn, first, {seq: 0, payload: "xy"}}, err: "ClientHello bytes differ"},
@@ -100,9 +102,9 @@ func TestC01InspectCapture(t *testing.T) {
 			if tc.frames[1] == second && result.FirstSeen[0].Offset != 2 {
 				t.Fatalf("capture order lost: %+v", result.FirstSeen)
 			}
-			if tc.frames[1] == first && (result.FirstRepeat == nil || result.FirstRepeat.Frame != 6 ||
-				result.RepeatedRanges != 1 || result.IncomingAfterHello != 3 ||
-				result.IncomingBeforeRepeat != 2 || result.IncomingPayloadBeforeRepeat != 1) {
+			if tc.frames[1] == first && (result.FirstRepeat == nil || result.FirstRepeat.Frame != 7 ||
+				result.RepeatedRanges != 1 || result.IncomingAfterHello != 4 || result.IncomingBeforeRepeat != 3 ||
+				result.IncomingPayloadBeforeRepeat != 1 || result.IncomingACKOnlyBeforeRepeat != 1 || result.IncomingRSTBeforeRepeat != 1) {
 				t.Fatalf("unexpected observations: %+v", result)
 			}
 		})
