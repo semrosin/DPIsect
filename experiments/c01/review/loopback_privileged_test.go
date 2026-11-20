@@ -63,31 +63,8 @@ func TestC01LoopbackSegmentation(t *testing.T) {
 
 func captureLoopbackTrial(t *testing.T, hello []byte, splits []int, readEach bool, configure func(context.Context)) (*bytes.Buffer, netip.AddrPort, netip.AddrPort) {
 	t.Helper()
-	ring, err := afpacket.NewTPacket(
-		afpacket.OptInterface("lo"),
-		afpacket.OptTPacketVersion(afpacket.TPacketVersion2),
-		afpacket.OptNumBlocks(1),
-		afpacket.OptPollTimeout(time.Second),
-	)
-	if errors.Is(err, syscall.EPERM) {
-		t.Skipf("requires CAP_NET_RAW: %v", err)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
+	ring := openLoopbackRing(t)
 	defer ring.Close()
-	filter, err := bpf.Assemble([]bpf.Instruction{
-		bpf.LoadExtension{Num: bpf.ExtType},
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.PACKET_OUTGOING, SkipFalse: 1},
-		bpf.RetConstant{Val: 0},
-		bpf.RetConstant{Val: 65535},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ring.SetBPF(filter); err != nil {
-		t.Fatal(err)
-	}
 
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
@@ -150,6 +127,45 @@ func captureLoopbackTrial(t *testing.T, hello []byte, splits []int, readEach boo
 
 	client := clientConn.LocalAddr().(*net.TCPAddr).AddrPort()
 	server := serverConn.LocalAddr().(*net.TCPAddr).AddrPort()
+	pcap := readLoopbackCapture(t, ring, client, server, func(tcp *layers.TCP) bool {
+		return bytes.Equal(tcp.Payload, marker)
+	})
+	return pcap, client, server
+}
+
+func openLoopbackRing(t *testing.T) *afpacket.TPacket {
+	t.Helper()
+	ring, err := afpacket.NewTPacket(
+		afpacket.OptInterface("lo"),
+		afpacket.OptTPacketVersion(afpacket.TPacketVersion2),
+		afpacket.OptNumBlocks(1),
+		afpacket.OptPollTimeout(time.Second),
+	)
+	if errors.Is(err, syscall.EPERM) {
+		t.Skipf("requires CAP_NET_RAW: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	filter, err := bpf.Assemble([]bpf.Instruction{
+		bpf.LoadExtension{Num: bpf.ExtType},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.PACKET_OUTGOING, SkipFalse: 1},
+		bpf.RetConstant{Val: 0},
+		bpf.RetConstant{Val: 65535},
+	})
+	if err != nil {
+		ring.Close()
+		t.Fatal(err)
+	}
+	if err := ring.SetBPF(filter); err != nil {
+		ring.Close()
+		t.Fatal(err)
+	}
+	return ring
+}
+
+func readLoopbackCapture(t *testing.T, ring *afpacket.TPacket, client, server netip.AddrPort, stop func(*layers.TCP) bool) *bytes.Buffer {
+	t.Helper()
 	var pcap bytes.Buffer
 	writer := pcapgo.NewWriter(&pcap)
 	if err := writer.WriteFileHeader(65535, layers.LinkTypeEthernet); err != nil {
@@ -167,12 +183,12 @@ func captureLoopbackTrial(t *testing.T, hello []byte, splits []int, readEach boo
 		if err != nil {
 			t.Fatal(err)
 		}
-		if incoming && bytes.Equal(tcp.Payload, marker) {
-			return &pcap, client, server
+		if incoming && stop(tcp) {
+			return &pcap
 		}
 	}
-	t.Fatal("receiver marker missing from capture")
-	return nil, client, server
+	t.Fatal("stop frame missing from capture")
+	return nil
 }
 
 // recordLoopbackTrial optionally preserves the in-memory PCAP for a lab report.

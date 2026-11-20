@@ -76,6 +76,23 @@ unshare -Urn sh -c 'ip link set lo up &&
     -run "^TestC01LoopbackSegmentation$" ./experiments/c01/review'
 ```
 
+## Проверка полной TLS-сессии
+
+`TestC01LoopbackVerifiedTLS` проверяет TLS 1.3 с валидацией сертификата
+и обменом HTTP на локальном Go-сервере. Контроль сравнивается с
+вариантом на двух TCP-сегментах. Граница задана по смещению в потоке
+и не зависит от SNI. Захват проверяет фактические TCP-границы и одну
+TLS-запись в каждом ClientHello.
+
+```bash
+unshare -Urn sh -c 'ip link set lo up &&
+  GOPROXY=off go test -tags privileged -v -count=3 \
+    -run "^TestC01LoopbackVerifiedTLS$" ./experiments/c01/review'
+```
+
+Для сохранения PCAP запускайте каждый повтор с `-count=1` и новым
+каталогом в `DPISECT_LOOPBACK_ARTIFACTS`.
+
 ## Проверка C03 на изолированном loopback
 
 Тест создаёт отдельное пространство имён через `unshare` и использует
