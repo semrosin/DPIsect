@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -21,11 +22,11 @@ type segment struct {
 }
 
 type review struct {
-	Trial                       int            `json:"trial"`
+	Trial                       int            `json:"trial,omitempty"`
 	SNI                         string         `json:"sni"`
 	Client                      netip.AddrPort `json:"client"`
 	Server                      netip.AddrPort `json:"server"`
-	PlanSHA256                  string         `json:"plan_sha256"`
+	PlanSHA256                  string         `json:"plan_sha256,omitempty"`
 	CaptureSHA256               string         `json:"capture_sha256"`
 	HelloSHA256                 string         `json:"client_hello_sha256"`
 	TLSRecordEnds               []int          `json:"tls_record_ends"`
@@ -41,14 +42,37 @@ type review struct {
 	IncomingACKOnlyBeforeRepeat int            `json:"incoming_ack_only_frames_after_complete_hello_before_first_repeat"`
 }
 
-func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []byte) (review, error) {
-	result := review{TCPSplitOffsets: []int{}}
-	reader, err := pcapgo.NewReader(input)
+type packetReader interface {
+	ReadPacketData() ([]byte, gopacket.CaptureInfo, error)
+	LinkType() layers.LinkType
+}
+
+func ethernetCapture(input io.Reader) (packetReader, error) {
+	buffered := bufio.NewReader(input)
+	header, err := buffered.Peek(4)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("read capture magic: %w", err)
+	}
+	var reader packetReader
+	if bytes.Equal(header, []byte{0x0a, 0x0d, 0x0d, 0x0a}) {
+		reader, err = pcapgo.NewNgReader(buffered, pcapgo.NgReaderOptions{ErrorOnMismatchingLinkType: true})
+	} else {
+		reader, err = pcapgo.NewReader(buffered)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if reader.LinkType() != layers.LinkTypeEthernet {
-		return result, errors.New("expected Ethernet PCAP")
+		return nil, errors.New("expected Ethernet PCAP or PCAPNG")
+	}
+	return reader, nil
+}
+
+func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []byte) (review, error) {
+	result := review{TCPSplitOffsets: []int{}}
+	reader, err := ethernetCapture(input)
+	if err != nil {
+		return result, err
 	}
 	seen := make([]bool, len(planned))
 	var base uint32

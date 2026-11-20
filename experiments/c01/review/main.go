@@ -45,6 +45,8 @@ func run(args []string, out io.Writer) error {
 	trialNumber := flags.Int("trial", 0, "one-based trial index in the plan")
 	source := flags.String("source", "", "client IPv4:port as seen in the capture")
 	seriesPath := flags.String("series", "", "local JSON manifest listing saved trials")
+	browser := flags.String("browser", "", "saved browser Ethernet capture")
+	sni := flags.String("sni", "", "visible TLS server name to select in a browser capture")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -56,6 +58,16 @@ func run(args []string, out io.Writer) error {
 	}
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
+	if *browser != "" || *sni != "" {
+		if *browser == "" || *sni == "" || flags.NFlag() != 2 {
+			return errors.New("expected -browser and -sni without other flags")
+		}
+		result, err := reviewBrowser(*browser, *sni)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(result)
+	}
 	if *seriesPath != "" {
 		if flags.NFlag() != 1 {
 			return errors.New("-series cannot be combined with single-trial flags")
