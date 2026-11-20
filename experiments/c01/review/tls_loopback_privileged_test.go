@@ -28,12 +28,32 @@ func TestC01LoopbackVerifiedTLS(t *testing.T) {
 		{name: "C01_TLS_two_segments", offset: 32},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			testVerifiedTLS(t, tc.offset)
+			testVerifiedTLS(t, tc.offset, nil, nil)
 		})
 	}
 }
 
-func testVerifiedTLS(t *testing.T, offset int) {
+func TestC03LoopbackVerifiedTLS(t *testing.T) {
+	if !enterLoopbackNamespace(t) {
+		return
+	}
+	for _, tc := range []struct {
+		name    string
+		reorder bool
+		order   []int
+	}{
+		{name: "C03_TLS_in_order", order: []int{0, 32}},
+		{name: "C03_TLS_reversed", reorder: true, order: []int{32, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testVerifiedTLS(t, 32, tc.order, func(ctx context.Context) {
+				configureLoopbackDelay(t, ctx, tc.reorder)
+			})
+		})
+	}
+}
+
+func testVerifiedTLS(t *testing.T, offset int, expectedOrder []int, configure func(context.Context)) {
 	t.Helper()
 	ring := openLoopbackRing(t)
 	defer ring.Close()
@@ -63,6 +83,9 @@ func testVerifiedTLS(t *testing.T, offset int) {
 	deadline, _ := ctx.Deadline()
 	if err := raw.SetDeadline(deadline); err != nil {
 		t.Fatal(err)
+	}
+	if configure != nil {
+		configure(ctx)
 	}
 	conn := &firstWriteConn{Conn: raw, offset: offset}
 	client := tls.Client(conn, &tls.Config{
@@ -113,6 +136,15 @@ func testVerifiedTLS(t *testing.T, offset int) {
 	}
 	if !slices.Equal(result.TCPSplitOffsets, expected) || result.RepeatedRanges != 0 {
 		t.Fatalf("observed splits=%v repeats=%d, want %v and no repeats", result.TCPSplitOffsets, result.RepeatedRanges, expected)
+	}
+	if expectedOrder != nil {
+		order := make([]int, 0, len(result.FirstSeen))
+		for _, seg := range result.FirstSeen {
+			order = append(order, seg.Offset)
+		}
+		if !slices.Equal(order, expectedOrder) {
+			t.Fatalf("observed capture order=%v, want %v", order, expectedOrder)
+		}
 	}
 	t.Logf("verified TLS version=%x cipher=%x; HTTP response matched", state.Version, state.CipherSuite)
 	recordLoopbackTrial(t, pcap, conn.hello, source, destination, result)
