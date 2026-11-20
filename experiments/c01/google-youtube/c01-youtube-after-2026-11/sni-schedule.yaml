@@ -1,0 +1,14 @@
+experiment_id: c01-youtube-after-2026-11
+endpoint:
+    role: target
+    ip: 142.251.155.119
+    port: 443
+sni_schedule:
+    - www.youtube.com
+    - www.youtube.com
+variants:
+    - control
+    - treatment
+inter_trial_gap_ms: 3000
+trial_timeout_ms: 5000
+client_hello_delay_ms: 1100

@@ -1,0 +1,29 @@
+question_id: C01
+experiment_id: c01-youtube-after-2026-11
+mode: valid-session
+sni: www.youtube.com
+paired_sni: www.youtube.com
+paired_timeout_ms: 5000
+paired_client_hello_delay_ms: 1100
+paired_hello:
+  control: {record_length: 260, sni_offset: 110, ignored_data: neutral}
+  treatment: {record_length: 260, sni_offset: 110, ignored_data: neutral}
+paired_split: {control: 126, treatment: 0}
+endpoint: {role: target, ip: 142.251.155.119, port: 443}
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  max_syn_retransmissions: 1
+  stop_conditions: [first repeated SYN, outgoing data or FIN retransmission, budget threshold, capture error or drops, abnormal channel behavior, SIGINT]
+schedule: {repetitions: 1, seed: 0, inter_trial_gap_ms: 3000, state_reset: none}
+capture: {client: artifacts/c01-youtube-after-2026-11/client.pcap}
+runner_log: artifacts/c01-youtube-after-2026-11/runner.log
+classification_rule: |
+  This exploratory pilot records only attempts actually started. Compare
+  attempts only if each first ClientHello and actual TCP segmentation
+  match its saved plan and capture has no drops. Identify retransmissions
+  and incoming frames using PCAP. Unmatched layouts, incomplete capture,
+  or insufficient observations yield inconclusive. A reproducible effect
+  requires a separately planned repeated series.
