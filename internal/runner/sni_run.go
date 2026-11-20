@@ -138,7 +138,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	trials, trialErr := runMonitoredSNITrials(ctx, addr, names,
 		time.Duration(timeoutMS)*time.Millisecond,
 		time.Duration(cfg.Schedule.InterTrialGapMS)*time.Millisecond, probe, source, budget)
-	if cfg.PairedHello != nil {
+	if cfg.PairedHello != nil || cfg.PairedSplit != nil {
 		for i := range trials {
 			trials[i].Variant = plan.Trials[i].Variant
 		}

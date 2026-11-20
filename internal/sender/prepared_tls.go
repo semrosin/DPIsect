@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -132,6 +133,18 @@ func (p *PreparedTLS) StartAfter(ctx context.Context, addr string, delay time.Du
 	}
 }
 
+// SetFirstWriteSplit sets an intended offset in the prepared ClientHello.
+// The kernel may coalesce or further split writes, so capture must verify it.
+func (p *PreparedTLS) SetFirstWriteSplit(offset int) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.started || offset < 0 || offset >= len(p.hello) {
+		return fmt.Errorf("invalid ClientHello split offset")
+	}
+	p.conn.split = offset
+	return nil
+}
+
 // Close stops the handshake, closes its connection and waits for its goroutine.
 func (p *PreparedTLS) Close() {
 	p.cancel()
@@ -140,6 +153,7 @@ func (p *PreparedTLS) Close() {
 }
 
 type gatedConn struct {
+	split  int
 	first  chan []byte
 	ready  chan struct{}
 	done   chan struct{}
@@ -179,12 +193,24 @@ func (g *gatedConn) active() (net.Conn, error) {
 }
 
 func (g *gatedConn) Write(b []byte) (int, error) {
-	g.once.Do(func() { g.first <- bytes.Clone(b) })
+	first := false
+	g.once.Do(func() { first = true; g.first <- bytes.Clone(b) })
 	conn, err := g.active()
 	if err != nil {
 		return 0, err
 	}
-	return conn.Write(b)
+	if !first || g.split == 0 {
+		return conn.Write(b)
+	}
+	n, err := conn.Write(b[:g.split])
+	if err != nil {
+		return n, err
+	}
+	if n != g.split {
+		return n, io.ErrShortWrite
+	}
+	m, err := conn.Write(b[g.split:])
+	return n + m, err
 }
 
 func (g *gatedConn) Read(b []byte) (int, error) {

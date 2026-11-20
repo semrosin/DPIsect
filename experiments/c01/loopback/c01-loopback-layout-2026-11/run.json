@@ -1,0 +1,93 @@
+{
+  "experiment_id": "c01-loopback-layout-2026-11",
+  "question_id": "C01",
+  "tool_commit": "94ee8aa8955d264e20d26379c2f7c9d641de0465",
+  "go_version": "go version go1.27.3 linux/amd64",
+  "kernel": "6.6.87.2-microsoft-standard-WSL2",
+  "tc_version": "tc utility, iproute2-6.19.0, libbpf 1.6.3",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "github.com/refraction-networking/utls": "v1.8.2",
+    "golang.org/x/net": "v0.38.0",
+    "golang.org/x/sys": "v0.31.0",
+    "gopkg.in/yaml.v3": "v3.0.1",
+    "github.com/andybalholm/brotli": "v1.0.6",
+    "github.com/klauspost/compress": "v1.17.4",
+    "golang.org/x/crypto": "v0.36.0"
+  },
+  "operator": "Codex",
+  "started_utc": "2026-11-20T15:12:46Z",
+  "finished_utc": "2026-11-20T15:12:48Z",
+  "plan_file": "experiments/c01/loopback/c01-loopback-layout-2026-11/plan.yaml",
+  "plan_sha256": "e3426d91dafd29237fc942829e9b1dbfe482548c736bbcde5a77ab4d75b0c301",
+  "trials": {
+    "C01_unsplit": {
+      "client": "127.0.0.1:58920",
+      "server": "127.0.0.1:33725",
+      "tcp_split_offsets": [],
+      "first_seen_offsets": [
+        0
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "1003461a5de39e9147a40650532798d599c1544705927737889185273349588b",
+      "frames": 6,
+      "ethernet_bytes": 555,
+      "pcap": "artifacts/c01-loopback-layout-2026-11/C01_unsplit.pcap"
+    },
+    "C01_before_sni": {
+      "client": "127.0.0.1:35068",
+      "server": "127.0.0.1:34183",
+      "tcp_split_offsets": [
+        76
+      ],
+      "first_seen_offsets": [
+        0,
+        76
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "1003461a5de39e9147a40650532798d599c1544705927737889185273349588b",
+      "frames": 8,
+      "ethernet_bytes": 687,
+      "pcap": "artifacts/c01-loopback-layout-2026-11/C01_before_sni.pcap"
+    },
+    "C01_inside_sni": {
+      "client": "127.0.0.1:47630",
+      "server": "127.0.0.1:34741",
+      "tcp_split_offsets": [
+        85
+      ],
+      "first_seen_offsets": [
+        0,
+        85
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "1003461a5de39e9147a40650532798d599c1544705927737889185273349588b",
+      "frames": 8,
+      "ethernet_bytes": 687,
+      "pcap": "artifacts/c01-loopback-layout-2026-11/C01_inside_sni.pcap"
+    },
+    "C01_after_sni": {
+      "client": "127.0.0.1:38516",
+      "server": "127.0.0.1:32971",
+      "tcp_split_offsets": [
+        94
+      ],
+      "first_seen_offsets": [
+        0,
+        94
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "1003461a5de39e9147a40650532798d599c1544705927737889185273349588b",
+      "frames": 8,
+      "ethernet_bytes": 687,
+      "pcap": "artifacts/c01-loopback-layout-2026-11/C01_after_sni.pcap"
+    }
+  },
+  "artifacts": {
+    "artifacts/c01-loopback-layout-2026-11/test.log": "16a82f5ae145dbbc9c1e86edf2fb8d5c7787af590ad396b1a8f244587f32c4ad",
+    "artifacts/c01-loopback-layout-2026-11/C01_after_sni.pcap": "294e11d9fef5f070bbd85f9bc42d69417f6cc55f1e937e90229c4cb087379f14",
+    "artifacts/c01-loopback-layout-2026-11/C01_before_sni.pcap": "6aa9751025a463f5b96845aaaa784d3193216c9ae4df43abd6c06aea1835cef7",
+    "artifacts/c01-loopback-layout-2026-11/C01_inside_sni.pcap": "d288c8a9fe2642ab603928b8f1660e2da92328cc3e5d428051f0c3fca44f7f7b",
+    "artifacts/c01-loopback-layout-2026-11/C01_unsplit.pcap": "98352f95528d7e36bfa378f679c60c03fee21ec47527e33554950f3f9da1b19f"
+  }
+}

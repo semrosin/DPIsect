@@ -1,0 +1,24 @@
+question_id: C03
+experiment_id: c03-loopback-order-2026-11
+endpoint: {role: lab, ip: 127.0.0.1, port: ephemeral}
+scope: "Калибровка приема потока с перестановкой посредством netem после TCP-handshake."
+planned_wire_packets:
+  hello_fixture: 'generator.BuildClientHello("c03.example.test", [32]byte{})'
+  tcp_split_offsets: [48]
+  tls_layout: "Один неизменный TLS record."
+  network: "TCP/IPv4 loopback. SEQ, ACK, TTL и checksum выбирает ядро."
+  control: {delay_ms: 30}
+  treatment: {delay_ms: 30, reorder_percent: 100, gap: 2}
+  expected_first_seen_offsets: {control: [0, 48], treatment: [48, 0]}
+  receiver_capture: "AF_PACKET на lo с исключением исходящих копий."
+schedule: {repetitions: 1, seed: null, state_reset: "Новый TCP-сеанс на вариант, qdisc устанавливается перед записями."}
+budget:
+  max_captured_frames_per_attempt: 64
+  max_capture_frame_bytes: 65535
+  deadline_s_per_connection: 5
+  deadline_s_child: 20
+  rationale: "Две локальные попытки с фиксированным числом записей. Отдельный лимит pps не применяется."
+  stop_conditions: ["ошибка сокета, tc или разбора", "дедлайн", "64 кадра без маркера приёмника"]
+classification_rule:
+  calibration_pass: "Обе попытки имеют одинаковые байты ClientHello, границы сегментов и TLS record. В приёмном PCAP порядок совпадает с ожидаемым. Приёмник читает исходную последовательность байтов."
+  research_result: "На стенде нет наблюдателя, чья реакция на исходный симптом измеряется. По вопросу C03 исход inconclusive независимо от прохождения калибровки."

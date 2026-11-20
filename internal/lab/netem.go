@@ -90,8 +90,7 @@ func (s *NetemController) Apply(ctx context.Context, p Profile) error {
 
 // Reset removes all impairments: the netem qdisc goes away and a
 // previously changed MTU is restored. Removing an already-clean root
-// qdisc ("Invalid argument" / "No such file") is not an error, so
-// Reset is idempotent.
+// qdisc is not an error, so Reset is idempotent.
 func (s *NetemController) Reset(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -151,5 +150,6 @@ func isMissingQdisc(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Invalid argument") ||
 		strings.Contains(msg, "No such file") ||
-		strings.Contains(msg, "Cannot find")
+		strings.Contains(msg, "Cannot find") ||
+		strings.Contains(msg, "Cannot delete qdisc with handle of zero")
 }

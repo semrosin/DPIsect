@@ -1,0 +1,20 @@
+question_id: C01
+experiment_id: c01-loopback-tls-2026-11
+endpoint: {role: lab, ip: 127.0.0.1, port: ephemeral}
+mode: valid-session
+scope: "Совместимость обычного TLS-сервера с одним и двумя TCP-сегментами ClientHello."
+planned_wire_packets:
+  tcp_split_offsets: {control: [], comparison: [32]}
+  tls_layout: "Один TLS record ClientHello. Используются свежие случайные поля каждой сессии."
+  transport: "Обычный TCP/IPv4 в изолированном loopback. SEQ, ACK, TTL и checksum выбирает ядро."
+  response: "Проверенный TLS 1.3 и заранее заданный HTTP-ответ."
+schedule: {repetitions: 3, seed: null, state_reset: "Новый TCP-сеанс на попытку."}
+budget:
+  max_captured_frames_per_attempt: 64
+  deadline_s_per_connection: 5
+  rationale: "Изолированный стенд. Три прогона пары выявляют нестабильность разбиения и дают повторение проверки совместимости."
+  stop_conditions: ["ошибка TLS или capture", "дедлайн", "64 кадра без входящего FIN"]
+classification_rule:
+  compatibility_confirmed: "Фактические границы совпали с планом в каждом из трёх прогонов. Все соединения проверили сертификат и получили заданный HTTP-ответ."
+  compatibility_inconclusive: "Нет подтверждения границ или одна из попыток не завершилась. Ошибка разбирается отдельно."
+  route_result: "Локальный сервер не воспроизводит исходный симптом исследуемого маршрута."

@@ -74,7 +74,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	if err := cfg.Validate(); err != nil {
 		return sniWirePlan{}, nil, fmt.Errorf("invalid config: %w", err)
 	}
-	names, err := pairedSNIScheduleFor(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions, cfg.PairedHello != nil)
+	names, err := pairedSNIScheduleFor(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions, cfg.PairedHello != nil || cfg.PairedSplit != nil)
 	if err != nil {
 		return sniWirePlan{}, nil, err
 	}
@@ -83,6 +83,9 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		GapMS: cfg.Schedule.InterTrialGapMS, TimeoutMS: cfg.PairedTimeoutMS, ClientHelloDelayMS: cfg.PairedClientHelloDelayMS, CloseDelayMS: cfg.PairedCloseDelayMS, StateReset: cfg.Schedule.StateReset, Budget: cfg.Budget,
 		Rule:      cfg.ClassificationRule,
 		WireNotes: fmt.Sprintf("TCP segmentation and retransmissions are kernel-managed; TLS after ClientHello depends on the server; TLS randomness uses crypto/rand, not schedule seed; capture continues up to %s after the final completed trial if the series is not canceled", postTrialCaptureWindow),
+	}
+	if cfg.PairedSplit != nil {
+		plan.WireNotes += "; planned split offsets describe two application writes, not guaranteed TCP segment boundaries"
 	}
 	sessions := make([]*sender.PreparedTLS, 0, len(names))
 	complete := false
@@ -113,8 +116,23 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		}
 		sessions = append(sessions, session)
 		payload := session.ClientHello()
+		var splits []int
+		if cfg.PairedSplit != nil {
+			variant = pairedVariant(i)
+			offset := cfg.PairedSplit.Control
+			if variant == "treatment" {
+				offset = cfg.PairedSplit.Treatment
+			}
+			if err := session.SetFirstWriteSplit(offset); err != nil {
+				return sniWirePlan{}, nil, fmt.Errorf("trial %d: %w", i, err)
+			}
+			splits = []int{}
+			if offset > 0 {
+				splits = append(splits, offset)
+			}
+		}
 		plan.Trials = append(plan.Trials, sniWireTrial{SNI: name, Variant: variant, Shape: shape, Packet: &generator.PlannedWirePacket{
-			Payload: payload, TLSRecordEnds: []int{len(payload)},
+			Payload: payload, SplitOffsets: splits, TLSRecordEnds: []int{len(payload)},
 		}})
 	}
 	data, err := yaml.Marshal(plan)
