@@ -172,3 +172,33 @@ func TestPreparedTLSCancelsBeforeClientHello(t *testing.T) {
 		t.Fatalf("unexpected bytes after cancellation: %d, %v", n, err)
 	}
 }
+
+func TestC01FirstWriteSplit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	prepared, err := PrepareTLS(ctx, "example.test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	hello := prepared.ClientHello()
+	if err := prepared.SetFirstWriteSplit(32); err != nil {
+		t.Fatal(err)
+	}
+	client, server := net.Pipe()
+	defer server.Close()
+	if err := prepared.conn.attach(client); err != nil {
+		t.Fatal(err)
+	}
+	first := make([]byte, 32)
+	if _, err := io.ReadFull(server, first); err != nil {
+		t.Fatal(err)
+	}
+	second := make([]byte, len(hello)-len(first))
+	if _, err := io.ReadFull(server, second); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(append(first, second...), hello) {
+		t.Fatal("split writes changed ClientHello")
+	}
+}
