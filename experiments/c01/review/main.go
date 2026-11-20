@@ -44,62 +44,87 @@ func run(args []string, out io.Writer) error {
 	pcapPath := flags.String("pcap", "", "local Ethernet PCAP")
 	trialNumber := flags.Int("trial", 0, "one-based trial index in the plan")
 	source := flags.String("source", "", "client IPv4:port as seen in the capture")
+	seriesPath := flags.String("series", "", "local JSON manifest listing saved trials")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
 		return err
 	}
-	if *planPath == "" || *pcapPath == "" || *trialNumber < 1 || flags.NArg() != 0 {
-		return errors.New("expected -plan, -pcap, -trial and -source")
+	if flags.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
 	}
-	client, err := netip.ParseAddrPort(*source)
-	if err != nil || !client.Addr().Is4() || client.Port() == 0 {
-		return errors.New("source must be a numeric IPv4 address and nonzero port")
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	if *seriesPath != "" {
+		if flags.NFlag() != 1 {
+			return errors.New("-series cannot be combined with single-trial flags")
+		}
+		series, err := reviewSeries(*seriesPath)
+		if err != nil {
+			return err
+		}
+		return encoder.Encode(series)
 	}
-
-	planFile, err := os.Open(*planPath)
+	result, err := reviewTrial(*planPath, *pcapPath, *trialNumber, *source)
 	if err != nil {
 		return err
+	}
+	return encoder.Encode(result)
+}
+
+func reviewTrial(planPath, pcapPath string, trialNumber int, source string) (review, error) {
+	if planPath == "" || pcapPath == "" || trialNumber < 1 {
+		return review{}, errors.New("expected -plan, -pcap, -trial and -source")
+	}
+	client, err := netip.ParseAddrPort(source)
+	if err != nil || !client.Addr().Is4() || client.Port() == 0 {
+		return review{}, errors.New("source must be a numeric IPv4 address and nonzero port")
+	}
+
+	planFile, err := os.Open(planPath)
+	if err != nil {
+		return review{}, err
 	}
 	defer planFile.Close()
 	data, err := io.ReadAll(io.LimitReader(planFile, maxPlanSize+1))
 	if err != nil {
-		return fmt.Errorf("read plan: %w", err)
+		return review{}, fmt.Errorf("read plan: %w", err)
 	}
 	if len(data) > maxPlanSize {
-		return errors.New("plan is too large")
+		return review{}, errors.New("plan is too large")
 	}
 	var plan wirePlan
 	if err := yaml.Unmarshal(data, &plan); err != nil {
-		return fmt.Errorf("decode plan: %w", err)
+		return review{}, fmt.Errorf("decode plan: %w", err)
 	}
-	if *trialNumber > len(plan.Trials) || !plan.Endpoint.IP.Is4() || plan.Endpoint.Port == 0 {
-		return errors.New("invalid trial index or plan endpoint")
+	if trialNumber > len(plan.Trials) || !plan.Endpoint.IP.Is4() || plan.Endpoint.Port == 0 {
+		return review{}, errors.New("invalid trial index or plan endpoint")
 	}
 	server := netip.AddrPortFrom(plan.Endpoint.IP, plan.Endpoint.Port)
 	if client == server {
-		return errors.New("client and server address and port must differ")
+		return review{}, errors.New("client and server address and port must differ")
 	}
-	trial := plan.Trials[*trialNumber-1]
+	trial := plan.Trials[trialNumber-1]
 	recordEnds, err := validateHello(trial.SNI, trial.Packet)
 	if err != nil {
-		return fmt.Errorf("invalid trial %d: %w", *trialNumber, err)
+		return review{}, fmt.Errorf("invalid trial %d: %w", trialNumber, err)
 	}
 
-	capture, err := os.Open(*pcapPath)
+	capture, err := os.Open(pcapPath)
 	if err != nil {
-		return err
+		return review{}, err
 	}
 	defer capture.Close()
 	hash := sha256.New()
 	result, err := inspectCapture(io.TeeReader(capture, hash), client, server, trial.Packet.Payload)
 	if err != nil {
-		return err
+		return review{}, err
 	}
 	result.Client = client
 	result.Server = server
-	result.Trial = *trialNumber
+	result.Trial = trialNumber
+	result.SNI = trial.SNI
 	result.PlanSHA256 = fmt.Sprintf("%x", sha256.Sum256(data))
 	result.CaptureSHA256 = fmt.Sprintf("%x", hash.Sum(nil))
 	result.HelloSHA256 = fmt.Sprintf("%x", sha256.Sum256(trial.Packet.Payload))
@@ -108,9 +133,7 @@ func run(args []string, out io.Writer) error {
 		match := slices.Equal(result.TCPSplitOffsets, trial.Packet.SplitOffsets)
 		result.SplitOffsetsMatch = &match
 	}
-	encoder := json.NewEncoder(out)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(result)
+	return result, nil
 }
 
 func validateHello(sni string, plan generator.PlannedWirePacket) ([]int, error) {

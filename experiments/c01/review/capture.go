@@ -22,6 +22,7 @@ type segment struct {
 
 type review struct {
 	Trial                       int            `json:"trial"`
+	SNI                         string         `json:"sni"`
 	Client                      netip.AddrPort `json:"client"`
 	Server                      netip.AddrPort `json:"server"`
 	PlanSHA256                  string         `json:"plan_sha256"`
@@ -36,6 +37,8 @@ type review struct {
 	IncomingAfterHello          int            `json:"incoming_frames_after_complete_hello"`
 	IncomingBeforeRepeat        int            `json:"incoming_frames_after_complete_hello_before_first_repeat"`
 	IncomingPayloadBeforeRepeat int            `json:"incoming_payload_frames_after_complete_hello_before_first_repeat"`
+	IncomingRSTBeforeRepeat     int            `json:"incoming_rst_frames_after_complete_hello_before_first_repeat"`
+	IncomingACKOnlyBeforeRepeat int            `json:"incoming_ack_only_frames_after_complete_hello_before_first_repeat"`
 }
 
 func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []byte) (review, error) {
@@ -83,6 +86,12 @@ func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []by
 					result.IncomingBeforeRepeat++
 					if len(tcp.Payload) > 0 {
 						result.IncomingPayloadBeforeRepeat++
+					}
+					if tcp.RST {
+						result.IncomingRSTBeforeRepeat++
+					}
+					if len(tcp.Payload) == 0 && tcp.ACK && !tcp.SYN && !tcp.FIN && !tcp.RST && !tcp.PSH && !tcp.URG {
+						result.IncomingACKOnlyBeforeRepeat++
 					}
 				}
 			}
