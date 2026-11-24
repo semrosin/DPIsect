@@ -1,0 +1,59 @@
+question_id: D02
+experiment_id: d02-old-2026-11
+mode: raw-experiment
+sni: probe.example
+
+endpoint:
+  role: lab
+  ip: 10.77.2.2
+  port: 8443
+
+budget:
+  max_packets: 100
+  max_bytes: 102400
+  max_rate_pps: 10
+  max_duration_s: 60
+  stop_conditions: []
+
+schedule:
+  repetitions: 1
+  seed: 42
+  inter_trial_gap_ms: 100
+  state_reset: none
+
+preflight:
+  enabled: false
+  host: ""
+  independent_resolver: ""
+
+lab:
+  enabled: false
+  config_id: netns-router-2026-11
+  loss_percent: 0.0
+  reorder_percent: 0.0
+  delay_ms: 0
+  mtu: 0
+
+capture:
+  client: artifacts/d02-old-2026-11/client.pcap
+  server: artifacts/d02-old-2026-11/server.pcap
+helper_log: artifacts/d02-old-2026-11/helper.log
+runner_log: artifacts/d02-old-2026-11/runner.log
+
+raw:
+  sequence: same_tcp
+  timeout_ms: 5000
+  fake:
+    enabled: true
+    ttl: 64
+    seq: old
+    ack: correct
+    checksum: correct
+    send_after_ms: 0
+
+classification_rule: |
+  Confirmed iff this old/outside-window SEQ treatment changes the
+  endpoint/observer response relative to the correct-SEQ control
+  across all repetitions. Refuted iff treatment equals control.
+  Inconclusive iff no observer is present on the path or the endpoint
+  behavior cannot be separated from DPI reaction.
