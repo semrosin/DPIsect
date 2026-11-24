@@ -23,12 +23,15 @@ type trial struct {
 }
 
 type report struct {
-	Host, Interface, DNSError                  string
-	Control, RequestedControl, ControlDNSError string
-	IP                                         netip.Addr
-	IPv4, ControlIPv4                          []netip.Addr
-	CaptureError                               error
-	Series                                     struct {
+	Host, DNSError            string
+	Control, RequestedControl string
+	ControlDNSFailed          bool
+	Operator, ExperimentID    string
+	Started                   time.Time
+	Budget                    runner.Budget
+	IP                        netip.Addr
+	CaptureError              error
+	Series                    struct {
 		Trials       []trial `json:"trials"`
 		Packets      int     `json:"observed_packets"`
 		Bytes        int     `json:"observed_ethernet_bytes"`
@@ -71,7 +74,7 @@ func (r report) diagnosis() string {
 		target.Wire.HelloBytes > 0 && control.Wire.HelloBytes > 0 && (timedOut || retried) &&
 		target.Wire.SYNACK && !target.Wire.ServerData && !target.Wire.Reset && target.Observation.Stage == "tls" {
 		if target.Wire.HelloBytes == control.Wire.HelloBytes {
-			return "ClientHello — вероятна фильтрация по SNI. На том же IP контроль завершил TLS, ресурс не получил TLS-ответа. Различие могло возникнуть на маршруте или на сервере."
+			return "ClientHello — вероятна фильтрация по SNI. На том же IP контроль завершил TLS, ресурс остался без ответа."
 		}
 		return "ClientHello — у ресурса нет ответа, контроль на том же IP завершил TLS. Отличались SNI и размер ClientHello."
 	}
@@ -96,8 +99,6 @@ func (t trial) phase() int {
 func (t trial) outcome() string {
 	w := t.Wire
 	switch {
-	case t.Observation.Stage == "complete":
-		return fmt.Sprintf("TLS — рукопожатие завершено, сертификат проверен (версия 0x%04x).", t.Observation.Version)
 	case t.WireNote != "":
 		return t.WireNote
 	case !w.SYNACK && w.Reset:
@@ -131,53 +132,49 @@ func (t trial) outcome() string {
 
 func (r report) save(dir string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n**Диагноз.** %s\n", r.Host, r.diagnosis())
+	fmt.Fprintf(&b, "# %s\n\n%s\n", r.Host, r.diagnosis())
 	if r.DNSError != "" {
-		fmt.Fprintf(&b, "\n- DNS. %s\n", inline(r.DNSError))
-	} else {
-		fmt.Fprintf(&b, "\n- DNS. %v. Выбран `%s:443`, интерфейс `%s`.\n", r.IPv4, r.IP, r.Interface)
+		fmt.Fprintf(&b, "\n%s\n", inline(r.DNSError))
+	} else if r.IP.IsValid() {
+		fmt.Fprintf(&b, "\nIPv4 `%s:443`", r.IP)
+		if r.Control != "" {
+			fmt.Fprintf(&b, ", контроль `%s`", r.Control)
+		}
+		b.WriteString(".\n")
 	}
-	if r.RequestedControl != "" && r.DNSError == "" {
-		switch {
-		case r.ControlDNSError != "":
-			fmt.Fprintf(&b, "- Контроль `%s`. DNS — %s\n", r.RequestedControl, inline(r.ControlDNSError))
-		case r.Control == "":
-			fmt.Fprintf(&b, "- Контроль `%s`. IPv4 %v, общего адреса нет. Выбран обычный профиль ресурса.\n", r.RequestedControl, r.ControlIPv4)
+	if r.RequestedControl != "" && r.DNSError == "" && r.Control == "" {
+		if r.ControlDNSFailed {
+			fmt.Fprintf(&b, "DNS контроля `%s` не вернул IPv4.\n", r.RequestedControl)
+		} else {
+			fmt.Fprintf(&b, "С контролем `%s` нет общего IPv4.\n", r.RequestedControl)
 		}
 	}
-	for i, t := range r.Series.Trials {
-		fmt.Fprintf(&b, "- Попытка %d, `%s`. %s", i+1, strings.TrimSuffix(t.SNI, "."), t.outcome())
-		if t.Wire.Client.IsValid() {
-			fmt.Fprintf(&b, " Клиент %s, SYN %d", t.Wire.Client, t.Wire.SYNs)
-			if t.Wire.HelloBytes > 0 {
-				fmt.Fprintf(&b, ", ClientHello %d Б", t.Wire.HelloBytes)
+	var attempts, successful int
+	for _, t := range r.Series.Trials {
+		if t.SNI != r.Control {
+			attempts++
+			if t.Observation.Stage == "complete" {
+				successful++
 			}
-			if t.Wire.DataRepeat {
-				b.WriteString(", повтор исходящих TCP-данных")
-			}
-			b.WriteString(".")
 		}
-		if t.Observation.Error != "" {
-			fmt.Fprintf(&b, " Журнал: %s", inline(t.Observation.Error))
-		}
-		b.WriteString("\n")
+	}
+	if successful > 0 && successful < attempts {
+		fmt.Fprintf(&b, "TLS прошёл в %d из %d попыток.\n", successful, attempts)
 	}
 	if r.Series.StopReason != "" {
-		fmt.Fprintf(&b, "- Остановка серии. %s\n", inline(r.Series.StopReason))
+		fmt.Fprintf(&b, "Остановка прогона — %s.\n", inline(r.Series.StopReason))
 	}
 	if r.CaptureError != nil {
-		fmt.Fprintf(&b, "- Артефакты попытки. %s\n", inline(r.CaptureError.Error()))
-	} else if r.Series.Packets > 0 {
-		fmt.Fprintf(&b, "- Захват. %d пакетов, %d Б. [PCAP](client.pcap), [наблюдения](sni-observations.json).\n", r.Series.Packets, r.Series.Bytes)
-		var run runner.RunRecord
-		if err := readJSON(filepath.Join(dir, "run.json"), &run); err == nil {
-			pcap := filepath.Join(dir, "client.pcap")
-			if hash, ok := run.Artifacts[pcap]; ok {
-				fmt.Fprintf(&b, "- SHA-256 PCAP `%s`. [Метаданные прогона](run.json).\n", hash)
-			}
-		}
+		fmt.Fprintf(&b, "Ошибка измерения — %s.\n", inline(r.CaptureError.Error()))
 	}
-	return os.WriteFile(filepath.Join(dir, "report.md"), []byte(b.String()), 0o600)
+	fmt.Fprintf(&b, "\n%s · %s", r.Started.Format(time.RFC3339), inline(r.Operator))
+	if r.ExperimentID != "" {
+		fmt.Fprintf(&b, " · %s · %d/%d пакетов, %d/%d Б · лимит %d пак/с, %d с",
+			r.ExperimentID, r.Series.Packets, r.Budget.MaxPackets, r.Series.Bytes, r.Budget.MaxBytes,
+			r.Budget.MaxRatePPS, r.Budget.MaxDurationS)
+	}
+	b.WriteByte('\n')
+	return os.WriteFile(filepath.Join(dir, r.Host+".md"), []byte(b.String()), 0o600)
 }
 
 func inline(s string) string {

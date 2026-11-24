@@ -32,8 +32,8 @@ const rule = "Record the last observed DNS/TCP/TLS stage. A same-IP control comp
 var hostnameLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type resource struct {
-	Host    string `json:"host"`
-	Control string `json:"control,omitempty"`
+	Host    string
+	Control string
 }
 
 func main() {
@@ -95,14 +95,6 @@ func run(ctx context.Context, args []string) error {
 	}
 	root, err := os.MkdirTemp(base, "batch-")
 	if err != nil {
-		return err
-	}
-	audit := struct {
-		Operator string     `json:"operator"`
-		UTC      time.Time  `json:"confirmed_utc"`
-		Targets  []resource `json:"targets"`
-	}{*operator, time.Now().UTC(), targets}
-	if err := writeJSON(filepath.Join(root, "confirmation.json"), audit); err != nil {
 		return err
 	}
 	fmt.Println(root)
@@ -185,28 +177,27 @@ func lookupIPv4(ctx context.Context, host string) ([]netip.Addr, error) {
 	return addrs, err
 }
 
-func checkResource(ctx context.Context, root, bin, iface, operator string, target resource) error {
-	dir := filepath.Join(root, target.Host)
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		return err
-	}
+func checkResource(ctx context.Context, root, bin, iface, operator string, target resource) (result error) {
+	diagnostic := report{Host: target.Host, Operator: operator, Started: time.Now().UTC()}
+	defer func() {
+		if result != nil && diagnostic.CaptureError == nil && diagnostic.DNSError == "" && len(diagnostic.Series.Trials) == 0 {
+			diagnostic.CaptureError = result
+		}
+		result = errors.Join(result, diagnostic.save(root))
+	}()
 
 	// The rooted spelling is accepted as a second input name by the paired runner.
 	// Go TLS uses the same wire SNI and verifies the same DNS name for both forms.
 	first, second := target.Host, target.Host+"."
-	var diagnostic report
-	diagnostic.Host = target.Host
 	diagnostic.RequestedControl = target.Control
 	addrs, dnsErr := lookupIPv4(ctx, target.Host)
-	diagnostic.IPv4 = addrs
 	if dnsErr != nil {
 		diagnostic.DNSError = dnsErr.Error()
-		return diagnostic.save(dir)
+		return ctx.Err()
 	}
 	ip := addrs[0]
 	if target.Control != "" {
 		controlIPs, err := lookupIPv4(ctx, target.Control)
-		diagnostic.ControlIPv4 = controlIPs
 		for _, addr := range addrs {
 			if slices.Contains(controlIPs, addr) {
 				first, second = target.Control, target.Host
@@ -214,14 +205,18 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 				break
 			}
 		}
-		if err != nil {
-			diagnostic.ControlDNSError = err.Error()
-		}
+		diagnostic.ControlDNSFailed = err != nil
 	}
-	diagnostic.IP, diagnostic.Interface = ip, iface
+	diagnostic.IP = ip
 	if err := ctx.Err(); err != nil {
-		return errors.Join(err, diagnostic.save(dir))
+		return err
 	}
+
+	dir, err := os.MkdirTemp("", "dpisect-batch-")
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, os.RemoveAll(dir)) }()
 
 	question := "A02"
 	if first != target.Host {
@@ -236,7 +231,7 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 	budget.StopConditions = []string{"first repeated SYN, data or FIN", "budget threshold", "capture error or drops", "SIGINT"}
 	config := runner.Config{
 		ExperimentID: strings.ToLower(question) + "-batch-" + strings.ReplaceAll(target.Host, ".", "-") +
-			"-" + strings.TrimPrefix(filepath.Base(root), "batch-") + "-" + time.Now().UTC().Format("2006-01"),
+			"-" + strings.TrimPrefix(filepath.Base(root), "batch-") + "-" + diagnostic.Started.Format("2006-01"),
 		QuestionID: question, Mode: "valid-session", SNI: first, PairedSNI: second, PairedTimeoutMS: 4000,
 		Endpoint: runner.Endpoint{Role: runner.RoleTarget, IP: ip.String(), Port: 443},
 		Budget:   budget, Schedule: runner.Schedule{Repetitions: 1, InterTrialGapMS: 3000, StateReset: "none"},
@@ -251,17 +246,11 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		return err
 	}
-	probeLog := filepath.Join(dir, "prober.log")
-	logFile, err := os.OpenFile(probeLog, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
+	diagnostic.ExperimentID, diagnostic.Budget = config.ExperimentID, budget
 	cmd := exec.CommandContext(ctx, bin, "-config", configPath, "-capture-iface", iface, "-operator", operator)
-	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 3 * time.Second
-	probeErr := cmd.Run()
-	closeErr := logFile.Close()
+	_, probeErr := cmd.Output()
 
 	obsErr := readJSON(filepath.Join(dir, "sni-observations.json"), &diagnostic.Series)
 	if obsErr == nil {
@@ -274,9 +263,17 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 			diagnostic.CaptureError = errors.Join(diagnostic.CaptureError, probeErr)
 		}
 	} else {
-		diagnostic.CaptureError = obsErr
+		diagnostic.CaptureError = errors.New("probe observations unavailable")
+		var exitErr *exec.ExitError
+		if errors.As(probeErr, &exitErr) {
+			_, detail, ok := strings.Cut(string(exitErr.Stderr), "\ndpi-prober: ")
+			if ok {
+				detail, _, _ = strings.Cut(detail, "\n")
+				probeErr = errors.New(strings.ReplaceAll(detail, dir+string(os.PathSeparator), ""))
+			}
+		}
 		if probeErr != nil {
-			diagnostic.Series.StopReason = probeErr.Error()
+			diagnostic.CaptureError = probeErr
 		}
 	}
 	if diagnostic.CaptureError != nil {
@@ -286,7 +283,7 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 		}
 	}
 	// A normal policy stop can still leave enough packet evidence for a report.
-	return errors.Join(closeErr, diagnostic.CaptureError, diagnostic.save(dir))
+	return diagnostic.CaptureError
 }
 
 func readJSON(path string, output any) error {
@@ -296,12 +293,4 @@ func readJSON(path string, output any) error {
 	}
 	defer func() { _ = f.Close() }()
 	return json.NewDecoder(io.LimitReader(f, 1<<20)).Decode(output)
-}
-
-func writeJSON(path string, input any) error {
-	data, err := json.MarshalIndent(input, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
 }

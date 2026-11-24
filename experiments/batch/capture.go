@@ -25,7 +25,6 @@ type frame struct {
 }
 
 type evidence struct {
-	Client      netip.AddrPort
 	SYNs        int
 	SYNACK      bool
 	Reset       bool
@@ -113,7 +112,7 @@ func matchTrial(frames []frame, attempt trial) (evidence, string) {
 	if start == nil {
 		return evidence{}, "В окне попытки нет исходящего SYN в PCAP."
 	}
-	wire := evidence{Client: start.client}
+	var wire evidence
 	var clientParts, serverParts []*layers.TCP
 	var serverSeq uint32
 	for _, f := range frames {

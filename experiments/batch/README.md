@@ -20,5 +20,6 @@ experiments/batch/run.sh -confirm-targets -iface eth0 -operator "$USER" -file ho
 sudo setcap -r bin/dpi-prober
 ```
 
-Диагноз по каждому домену — в `artifacts/batch-diagnostics/batch-*/<домен>/report.md`.
-PCAP лежит рядом. Проверка идёт до конца TLS-рукопожатия.
+После прогона остаётся один короткий файл на домен —
+`artifacts/batch-diagnostics/batch-*/<домен>.md`. Захват используется для
+диагностики до конца TLS-рукопожатия и удаляется вместе со служебными файлами.
