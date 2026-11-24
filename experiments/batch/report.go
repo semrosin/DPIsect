@@ -179,32 +179,32 @@ func failureCause(t *trial, stopReason string) string {
 	w := t.Wire
 	switch {
 	case strings.Contains(t.Observation.Error, "network is unreachable") || strings.Contains(t.Observation.Error, "no route to host"):
-		return "Вероятная причина — сбой маршрута до выбранного IP."
+		return "Сервис недоступен. Вероятная причина — сбой маршрута до выбранного IP."
 	case strings.Contains(stopReason, "SYN retransmission limit") && !w.SYNACK && w.SYNs > 0:
-		return "Вероятная причина — потеря или фильтрация TCP/443. Даже после повторного SYN ответа не было."
+		return "Сервис недоступен. Вероятная причина — потеря или фильтрация TCP/443. Даже после повторного SYN ответа не было."
 	case t.Observation.Error == context.Canceled.Error() && !w.DataRepeat && !w.Reset:
 		if stopReason != "" {
 			return "Проверка прервана — " + shortStop(stopReason) + "."
 		}
 		return "Проверка прервана до получения результата."
 	case t.WireNote != "":
-		return "Вывод — пакеты попытки не удалось однозначно сопоставить."
+		return "Сервис недоступен. Вывод — пакеты попытки не удалось однозначно сопоставить."
 	case !w.SYNACK && w.Reset:
-		return "Вероятная причина — отказ на порту TCP/443. На SYN пришёл RST."
+		return "Сервис недоступен. Вероятная причина — отказ на порту TCP/443. На SYN пришёл RST."
 	case !w.SYNACK:
-		return "Вероятная причина — потеря или фильтрация TCP/443 до TLS. SYN-ACK не получен."
+		return "Сервис недоступен. Вероятная причина — потеря или фильтрация TCP/443 до TLS. SYN-ACK не получен."
 	case strings.Contains(t.Observation.Error, "x509:"):
-		return "Вероятная причина — сертификат не прошёл проверку."
+		return "Сервис недоступен. Вероятная причина — сертификат не прошёл проверку."
 	case w.Alert != nil || strings.Contains(t.Observation.Error, "remote error: tls:"):
-		return "Вероятная причина — отклонение TLS-рукопожатия. Получен TLS Alert."
+		return "Сервис недоступен. Вероятная причина — отклонение TLS-рукопожатия. Получен TLS Alert."
 	case w.Reset:
-		return "Вероятная причина — принудительный сброс TCP после установления соединения."
+		return "Сервис недоступен. Вероятная причина — принудительный сброс TCP после установления соединения."
 	case w.ServerHello:
-		return "Вывод — сервер начал TLS-рукопожатие, сбой произошёл после ServerHello."
+		return "Сервис недоступен. Вывод — сервер начал TLS-рукопожатие, сбой произошёл после ServerHello."
 	case w.HelloBytes > 0 && !w.ServerData:
-		return "Вероятная причина — отбрасывание ClientHello или ответных пакетов TLS. TCP до этого установился."
+		return "Сервис недоступен. Вероятная причина — отбрасывание ClientHello или ответных пакетов TLS. TCP до этого установился."
 	default:
-		return "Вывод — TCP установился, сбой произошёл на начальном этапе TLS."
+		return "Сервис недоступен. Вывод — TCP установился, сбой произошёл на начальном этапе TLS."
 	}
 }
 
