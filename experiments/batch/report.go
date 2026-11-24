@@ -66,6 +66,10 @@ func (s seriesResult) connected() bool {
 	return s.Err == nil && t != nil && t.Observation.Stage == "complete"
 }
 
+func (s seriesResult) mtuStop() bool {
+	return strings.Contains(s.StopReason, "matching frame exceeds interface MTU allowance")
+}
+
 func (s seriesResult) silentHello(t *trial) bool {
 	if s.Err != nil || t == nil || t.WireNote != "" || t.Observation.Stage != "tls" {
 		return false
@@ -81,6 +85,8 @@ func (s seriesResult) outcome(control string) string {
 	switch {
 	case s.Err != nil:
 		return "Ошибка измерения — " + inline(s.Err.Error())
+	case s.mtuStop() && (t == nil || t.Observation.Stage != "complete"):
+		return "Захват остановился на кадре больше допустимого MTU"
 	case t == nil:
 		return "Попытка ресурса не началась"
 	case t.Observation.Stage == "complete" && s.Profile.tcpOnly:
@@ -104,21 +110,28 @@ func (r report) diagnosis() string {
 	}
 	tcp := r.Runs[0]
 	if !tcp.connected() {
-		return failureCause(tcp.targetTrial(""))
+		return failureCause(tcp.targetTrial(""), tcp.StopReason)
 	}
 	var worked, silent, best *seriesResult
-	tlsAvailable := false
+	tlsAvailable, mtuStop := false, false
 	for i := 1; i < len(r.Runs); i++ {
 		s := &r.Runs[i]
 		t := s.targetTrial(r.Control)
+		mtuStop = mtuStop || s.mtuStop()
 		if s.Err != nil || t == nil {
 			continue
 		}
 		if t.Observation.Stage == "complete" {
+			if s.Profile.delayMS == 0 {
+				return "Ресурс доступен по TLS без дополнительных настроек."
+			}
 			tlsAvailable = true
 			if len(s.Trials) == 2 && s.Trials[0].Observation.Stage == "complete" && s.Trials[1].Observation.Stage == "complete" {
 				worked = s
 			}
+			continue
+		}
+		if s.mtuStop() {
 			continue
 		}
 		if best == nil || t.phase() > best.targetTrial(r.Control).phase() {
@@ -132,7 +145,7 @@ func (r report) diagnosis() string {
 		return fmt.Sprintf("Вероятная причина — чувствительность к моменту отправки ClientHello. В этой серии «%s» прошёл, «%s» остался без ответа.", worked.Profile.label, silent.Profile.label)
 	}
 	if tlsAvailable {
-		return "Вывод — TLS доступен на выбранном IPv4."
+		return "Ресурс доступен по TLS с задержкой ClientHello. Обычный TLS в этом прогоне не завершился."
 	}
 	for i := 1; i < len(r.Runs); i++ {
 		s := r.Runs[i]
@@ -151,12 +164,15 @@ func (r report) diagnosis() string {
 		}
 	}
 	if best != nil {
-		return failureCause(best.targetTrial(r.Control))
+		return failureCause(best.targetTrial(r.Control), best.StopReason)
+	}
+	if mtuStop {
+		return "TCP доступен. Проверку TLS прервал захват: интерфейс отдал кадр больше допустимого MTU, возможно из-за offload."
 	}
 	return "Вывод — TCP доступен, результат TLS для ресурса отсутствует."
 }
 
-func failureCause(t *trial) string {
+func failureCause(t *trial, stopReason string) string {
 	if t == nil {
 		return "Вывод — попытка ресурса не состоялась."
 	}
@@ -164,8 +180,13 @@ func failureCause(t *trial) string {
 	switch {
 	case strings.Contains(t.Observation.Error, "network is unreachable") || strings.Contains(t.Observation.Error, "no route to host"):
 		return "Вероятная причина — сбой маршрута до выбранного IP."
+	case strings.Contains(stopReason, "SYN retransmission limit") && !w.SYNACK && w.SYNs > 0:
+		return "Вероятная причина — потеря или фильтрация TCP/443. Даже после повторного SYN ответа не было."
 	case t.Observation.Error == context.Canceled.Error() && !w.DataRepeat && !w.Reset:
-		return "Вывод — проверка остановлена до завершения попытки."
+		if stopReason != "" {
+			return "Проверка прервана — " + shortStop(stopReason) + "."
+		}
+		return "Проверка прервана до получения результата."
 	case t.WireNote != "":
 		return "Вывод — пакеты попытки не удалось однозначно сопоставить."
 	case !w.SYNACK && w.Reset:
@@ -265,7 +286,7 @@ func (r report) save(dir string) error {
 			if i < len(r.Runs) {
 				run := r.Runs[i]
 				outcome = run.outcome(r.Control)
-				if run.StopReason != "" && run.Err == nil {
+				if run.StopReason != "" && run.Err == nil && !run.mtuStop() {
 					outcome += " (" + shortStop(run.StopReason) + ")"
 				}
 			}
@@ -288,6 +309,8 @@ func (r report) save(dir string) error {
 
 func shortStop(reason string) string {
 	switch {
+	case strings.Contains(reason, "matching frame exceeds interface MTU allowance"):
+		return "кадр больше допустимого MTU, возможно из-за offload"
 	case strings.Contains(reason, "SYN retransmission limit"):
 		return "остановка после повторного SYN"
 	case strings.Contains(reason, "outgoing data or FIN retransmission"):

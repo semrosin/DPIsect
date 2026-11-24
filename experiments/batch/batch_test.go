@@ -114,8 +114,8 @@ func TestB02_DiagnosesRequireComparableWireEvidence(t *testing.T) {
 			t.Wire.ServerData, t.Observation.Error = true, "tls: failed to verify certificate: x509: expired"
 		}, "сертификат не прошёл проверку"},
 		{"missing SYN", func(t *trial) { t.WireNote = "no SYN" }, "пакеты попытки не удалось"},
-		{"canceled", func(t *trial) { t.Observation.Error = "context canceled" }, "проверка остановлена"},
-		{"success", func(t *trial) { t.Observation.Stage = "complete" }, "TLS доступен"},
+		{"canceled", func(t *trial) { t.Observation.Error = "context canceled" }, "Проверка прервана"},
+		{"success", func(t *trial) { t.Observation.Stage = "complete" }, "Ресурс доступен по TLS без дополнительных настроек"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,6 +130,21 @@ func TestB02_DiagnosesRequireComparableWireEvidence(t *testing.T) {
 				t.Errorf("diagnosis = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestA02_ReportsMTUCaptureStop(t *testing.T) {
+	connected := trial{Observation: sender.ConnectionObservation{Stage: "complete"}}
+	canceled := trial{
+		Observation: sender.ConnectionObservation{Stage: "tls", Error: context.Canceled.Error()},
+		Wire:        evidence{SYNACK: true, ClientData: true, HelloBytes: 1516},
+	}
+	r := report{Runs: []seriesResult{
+		{Profile: profiles[0], Trials: []trial{connected}},
+		{Profile: profiles[1], Trials: []trial{canceled}, StopReason: "wire budget: matching frame exceeds interface MTU allowance; offload may obscure packet counts"},
+	}}
+	if got := r.diagnosis(); !strings.Contains(got, "кадр больше допустимого MTU") {
+		t.Fatalf("diagnosis = %q", got)
 	}
 }
 
