@@ -1,0 +1,25 @@
+{
+  "experiment_id": "d04-corrupt-checksum-2026-11",
+  "question_id": "D04",
+  "tool_version": "0.1.0-stage4",
+  "tool_commit": "4e1cd8c-dirty",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-24T16:32:44Z",
+  "finished_utc": "2026-11-24T16:32:45Z",
+  "operator": "root",
+  "config_file": "experiments/stage4-d01-d04-2026-11/runs/d04-corrupt-checksum-2026-11/config.yaml",
+  "lab_config_id": "netns-router-2026-11",
+  "artifacts": {
+    "experiments/stage4-d01-d04-2026-11/runs/d04-corrupt-checksum-2026-11/raw-observations.json": "508618986992ed650ebdec1edae1a2680086d0d53009bf17796bfc2e46b577da",
+    "artifacts/d04-corrupt-checksum-2026-11/client.pcap": "52ebd943d0f40c6c21b5ef6c6f3b55eb43815d6ccae74b9c26b087b3f7bf6afe",
+    "artifacts/d04-corrupt-checksum-2026-11/helper.log": "b06e6cfa9ae348e0e26054263f8a2417e8b3280c874592e0d280755eb4850dbe",
+    "artifacts/d04-corrupt-checksum-2026-11/runner.log": "b1b7462ae6769fd8538c069e3b7f0a7252d7b85b08d0b22be2e1fd64f9f3b827",
+    "artifacts/d04-corrupt-checksum-2026-11/server.pcap": "67f6805d1386ae7f4ec0ba600cc33ae511bd70835f979b3c8173101ff1e8a034"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "experiment_id": "d04-corrupt-checksum-2026-11",
+  "question_id": "D04",
+  "mode": "raw-experiment",
+  "sequence": "same_tcp",
+  "trials": [
+    {
+      "repetition": 1,
+      "started_utc": "2026-11-24T16:32:44.648734577Z",
+      "finished_utc": "2026-11-24T16:32:44.969334116Z",
+      "sequence": "same_tcp",
+      "fake_sent": true,
+      "fake_bytes": 139,
+      "fake_payload_sha256": "a09877a59dee0576dce51a9aa89b8d57791cb5b46426c9352c1911cf723904ac",
+      "fake_ttl": 64,
+      "fake_seq_mode": "correct",
+      "fake_ack_mode": "correct",
+      "fake_checksum_mode": "corrupt",
+      "fake_seq": 113159400,
+      "fake_ack": 583387210,
+      "fake_checksum": 9859,
+      "flow": {
+        "SrcIP": "10.77.1.2",
+        "DstIP": "10.77.2.2",
+        "SrcPort": 40350,
+        "DstPort": 8443,
+        "SndNxt": 113159400,
+        "RcvNxt": 583387210,
+        "Window": 64240
+      },
+      "real_client_hello_bytes": 139,
+      "real_payload_sha256": "a45847201297c4597b476ef1b11d528b9d1fea29c430eda0ba72b96a4e93f406",
+      "real_client_hello_written": true
+    }
+  ]
+}
