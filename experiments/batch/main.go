@@ -68,12 +68,17 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	if !*confirm {
+		var settings []string
+		for _, profile := range profiles {
+			settings = append(settings, profile.label+" ("+profile.settings()+")")
+		}
+		plan := strings.Join(settings, " · ")
 		for _, target := range targets {
-			profile := "TCP, TLS immediately, TLS after 500 ms"
+			comparison := ""
 			if target.Control != "" {
-				profile += "; SNI control " + target.Control + " on a common IPv4"
+				comparison = " · контроль SNI " + target.Control + " при общем IPv4"
 			}
-			fmt.Printf("%s:443 — %s\n", target.Host, profile)
+			fmt.Printf("%s:443 — %s%s\n", target.Host, plan, comparison)
 		}
 		return nil
 	}
@@ -236,13 +241,32 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 type probeProfileSpec struct {
 	name, label string
 	tcpOnly     bool
-	delayMS     int
+	helloMS     int
+	closeMS     int
 }
+
+const (
+	trialTimeoutMS  = 4000
+	interTrialGapMS = 3000
+)
 
 var profiles = [...]probeProfileSpec{
 	{name: "tcp", label: "Только TCP", tcpOnly: true},
 	{name: "tls", label: "TLS сразу"},
-	{name: "tls-delay", label: "TLS через 500 мс", delayMS: 500},
+	{name: "tls-delay", label: "TLS с задержкой ClientHello", helloMS: 500},
+	{name: "tls-hold", label: "TLS с удержанием соединения", closeMS: 1000},
+}
+
+func (p probeProfileSpec) timeoutMS() int {
+	return trialTimeoutMS + p.helloMS + p.closeMS
+}
+
+func (p probeProfileSpec) settings() string {
+	if p.tcpOnly {
+		return fmt.Sprintf("без TLS, таймаут %d мс", p.timeoutMS())
+	}
+	return fmt.Sprintf("ClientHello через %d мс после TCP, закрытие через %d мс после TLS, таймаут %d мс",
+		p.helloMS, p.closeMS, p.timeoutMS())
 }
 
 func probeProfile(ctx context.Context, bin, iface string, r report, profile probeProfileSpec, first, second string) (run seriesResult) {
@@ -261,7 +285,7 @@ func probeProfile(ctx context.Context, bin, iface string, r report, profile prob
 	pcap := filepath.Join(dir, "client.pcap")
 	limit := 1
 	budget := runner.DefaultBudget()
-	budget.MaxDurationS = 14
+	budget.MaxDurationS = 15
 	budget.MaxSYNRetransmissions = &limit
 	budget.StopConditions = []string{"first repeated SYN, data or FIN", "budget threshold", "capture error or drops", "SIGINT"}
 	config := runner.Config{
@@ -269,18 +293,19 @@ func probeProfile(ctx context.Context, bin, iface string, r report, profile prob
 			"-" + r.BatchID + "-" + r.Started.Format("2006-01"),
 		QuestionID: question, Mode: "valid-session",
 		Endpoint: runner.Endpoint{Role: runner.RoleTarget, IP: r.IP.String(), Port: 443},
-		Budget:   budget, Schedule: runner.Schedule{Repetitions: 1, InterTrialGapMS: 3000, StateReset: "none"},
+		Budget:   budget, Schedule: runner.Schedule{Repetitions: 1, InterTrialGapMS: interTrialGapMS, StateReset: "none"},
 		Capture: runner.CapturePaths{Client: pcap}, RunnerLog: filepath.Join(dir, "runner.log"),
 		ClassificationRule: rule,
 	}
 	observations := "sni-observations.json"
 	if profile.tcpOnly {
-		config.TCPOnly, config.TCPTimeoutMS = true, 4000
+		config.TCPOnly, config.TCPTimeoutMS = true, profile.timeoutMS()
 		observations = "tcp-observations.json"
 	} else {
 		config.SNI, config.PairedSNI = first, second
-		config.PairedClientHelloDelayMS = profile.delayMS
-		config.PairedTimeoutMS = 4000 + profile.delayMS
+		config.PairedClientHelloDelayMS = profile.helloMS
+		config.PairedCloseDelayMS = profile.closeMS
+		config.PairedTimeoutMS = profile.timeoutMS()
 	}
 	data, err := yaml.Marshal(config)
 	if err != nil {

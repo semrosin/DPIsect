@@ -163,3 +163,31 @@ func TestA02_DiagnosesDifferentTLSSettings(t *testing.T) {
 		t.Fatalf("diagnosis = %q", got)
 	}
 }
+
+func TestA02_ReportListsProbeSettingsAndSkipReason(t *testing.T) {
+	r := report{Host: "site.example", IP: netip.MustParseAddr("192.0.2.10"), Runs: []seriesResult{
+		{Profile: profiles[0], Trials: []trial{{Wire: evidence{SYNs: 2}}}},
+	}}
+	dir := t.TempDir()
+	if err := r.save(dir); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, r.Host+".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"без TLS, таймаут 4000 мс",
+		"ClientHello через 0 мс после TCP, закрытие через 0 мс после TLS, таймаут 4000 мс",
+		"ClientHello через 500 мс после TCP, закрытие через 0 мс после TLS, таймаут 4500 мс",
+		"ClientHello через 0 мс после TCP, закрытие через 1000 мс после TLS, таймаут 5000 мс",
+		"1/1 попыток",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("report is missing %q", want)
+		}
+	}
+	if got := strings.Count(string(data), "пропущен, TCP не установился"); got != 3 {
+		t.Fatalf("report contains %d skipped TLS profiles, want 3", got)
+	}
+}

@@ -92,6 +92,9 @@ func (s seriesResult) outcome(control string) string {
 	case t.Observation.Stage == "complete" && s.Profile.tcpOnly:
 		return "TCP подключился"
 	case t.Observation.Stage == "complete":
+		if strings.HasPrefix(t.Observation.Error, "close delay interrupted") {
+			return "TLS прошёл, удержание соединения прервано"
+		}
 		if control == "" && len(s.Trials) == 2 && s.Trials[0].Observation.Stage != s.Trials[1].Observation.Stage {
 			return "TLS прошёл в одной из двух попыток"
 		}
@@ -99,6 +102,25 @@ func (s seriesResult) outcome(control string) string {
 	default:
 		return strings.TrimSuffix(t.outcome(), ".")
 	}
+}
+
+func (s seriesResult) controlOutcome(control string) string {
+	for _, t := range s.Trials {
+		if t.SNI != control {
+			continue
+		}
+		if t.Observation.Stage == "complete" {
+			if strings.HasPrefix(t.Observation.Error, "close delay interrupted") {
+				return "TLS прошёл, удержание прервано"
+			}
+			return "TLS прошёл"
+		}
+		if s.Err != nil || s.mtuStop() {
+			return "измерение прервано"
+		}
+		return strings.TrimSuffix(t.outcome(), ".")
+	}
+	return "попытка не началась"
 }
 
 func (r report) diagnosis() string {
@@ -112,8 +134,8 @@ func (r report) diagnosis() string {
 	if !tcp.connected() {
 		return failureCause(tcp.targetTrial(""), tcp.StopReason)
 	}
-	var worked, silent, best *seriesResult
-	tlsAvailable, mtuStop := false, false
+	var worked, silent, best, tlsAvailable *seriesResult
+	mtuStop := false
 	for i := 1; i < len(r.Runs); i++ {
 		s := &r.Runs[i]
 		t := s.targetTrial(r.Control)
@@ -122,11 +144,14 @@ func (r report) diagnosis() string {
 			continue
 		}
 		if t.Observation.Stage == "complete" {
-			if s.Profile.delayMS == 0 {
+			if s.Profile.helloMS == 0 && s.Profile.closeMS == 0 {
 				return "Ресурс доступен по TLS без дополнительных настроек."
 			}
-			tlsAvailable = true
-			if len(s.Trials) == 2 && s.Trials[0].Observation.Stage == "complete" && s.Trials[1].Observation.Stage == "complete" {
+			if tlsAvailable == nil {
+				tlsAvailable = s
+			}
+			if s.Profile.helloMS > 0 && len(s.Trials) == 2 &&
+				s.Trials[0].Observation.Stage == "complete" && s.Trials[1].Observation.Stage == "complete" {
 				worked = s
 			}
 			continue
@@ -137,15 +162,15 @@ func (r report) diagnosis() string {
 		if best == nil || t.phase() > best.targetTrial(r.Control).phase() {
 			best = s
 		}
-		if s.silentHello(t) {
+		if s.Profile.helloMS == 0 && s.Profile.closeMS == 0 && s.silentHello(t) {
 			silent = s
 		}
 	}
 	if worked != nil && silent != nil {
 		return fmt.Sprintf("Вероятная причина — чувствительность к моменту отправки ClientHello. В этой серии «%s» прошёл, «%s» остался без ответа.", worked.Profile.label, silent.Profile.label)
 	}
-	if tlsAvailable {
-		return "Ресурс доступен по TLS с задержкой ClientHello. Обычный TLS в этом прогоне не завершился."
+	if tlsAvailable != nil {
+		return fmt.Sprintf("TLS завершился в режиме «%s». Базовый прогон TLS сразу результата не дал.", tlsAvailable.Profile.label)
 	}
 	for i := 1; i < len(r.Runs); i++ {
 		s := r.Runs[i]
@@ -263,11 +288,11 @@ func (r report) save(dir string) error {
 	if r.DNSError != "" {
 		fmt.Fprintf(&b, "\n%s\n", inline(r.DNSError))
 	} else if r.IP.IsValid() {
-		fmt.Fprintf(&b, "\nIPv4 `%s:443`", r.IP)
+		fmt.Fprintf(&b, "\nIPv4 `%s:443`, SNI ресурса `%s`", r.IP, r.Host)
 		if r.Control != "" {
-			fmt.Fprintf(&b, ", контроль `%s`", r.Control)
+			fmt.Fprintf(&b, ", контрольный SNI `%s` первым в каждой TLS-паре", r.Control)
 		}
-		b.WriteString(".\n")
+		fmt.Fprintf(&b, ". Пауза между попытками в TLS-паре %d мс.\n", interTrialGapMS)
 	}
 	if r.RequestedControl != "" && r.DNSError == "" && r.Control == "" {
 		if r.ControlDNSFailed {
@@ -279,19 +304,24 @@ func (r report) save(dir string) error {
 	if r.SetupError != nil {
 		fmt.Fprintf(&b, "Ошибка запуска — %s.\n", inline(r.SetupError.Error()))
 	}
-	if r.DNSError == "" && len(r.Runs) > 0 {
-		b.WriteByte('\n')
-		for i, profile := range profiles {
-			outcome := "пропущен"
-			if i < len(r.Runs) {
-				run := r.Runs[i]
-				outcome = run.outcome(r.Control)
-				if run.StopReason != "" && run.Err == nil && !run.mtuStop() {
-					outcome += " (" + shortStop(run.StopReason) + ")"
-				}
+	b.WriteByte('\n')
+	for i, profile := range profiles {
+		outcome := r.skipReason()
+		if i < len(r.Runs) {
+			run := r.Runs[i]
+			attempts := 2
+			if profile.tcpOnly {
+				attempts = 1
 			}
-			fmt.Fprintf(&b, "- %s — %s.\n", profile.label, outcome)
+			outcome = fmt.Sprintf("%s (%d/%d попыток)", run.outcome(r.Control), len(run.Trials), attempts)
+			if r.Control != "" && !profile.tcpOnly {
+				outcome += ", контроль — " + run.controlOutcome(r.Control)
+			}
+			if run.StopReason != "" && run.Err == nil && !run.mtuStop() {
+				outcome += " (" + shortStop(run.StopReason) + ")"
+			}
 		}
+		fmt.Fprintf(&b, "- **%s** (%s) — %s.\n", profile.label, profile.settings(), outcome)
 	}
 	fmt.Fprintf(&b, "\n%s · %s", r.Started.Format(time.RFC3339), inline(r.Operator))
 	if len(r.Runs) > 0 {
@@ -305,6 +335,19 @@ func (r report) save(dir string) error {
 	}
 	b.WriteByte('\n')
 	return os.WriteFile(filepath.Join(dir, r.Host+".md"), []byte(b.String()), 0o600)
+}
+
+func (r report) skipReason() string {
+	switch {
+	case r.DNSError != "":
+		return "пропущен, DNS не вернул IPv4"
+	case r.SetupError != nil || len(r.Runs) > 0 && r.Runs[len(r.Runs)-1].Err != nil:
+		return "пропущен после ошибки измерения"
+	case len(r.Runs) > 0 && !r.Runs[0].connected():
+		return "пропущен, TCP не установился"
+	default:
+		return "пропущен, запуск прерван"
+	}
 }
 
 func shortStop(reason string) string {
