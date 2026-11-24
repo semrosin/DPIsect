@@ -5,10 +5,10 @@
 именам с общим IPv4. Имена также можно передать аргументами вместо `-file`.
 
 Из корня репозитория просмотрите список и проверьте цели по
-[правилам сетевых проб](../../../docs/SAFETY.md).
+[правилам сетевых проб](../../docs/SAFETY.md).
 
 ```bash
-experiments/a02/batch/run.sh -file hosts.txt
+experiments/batch/run.sh -file hosts.txt
 ```
 
 Подставьте свой интерфейс вместо `eth0`. Для остановки нажмите `Ctrl+C`.
@@ -16,9 +16,9 @@ experiments/a02/batch/run.sh -file hosts.txt
 ```bash
 go build -o bin/dpi-prober -ldflags "-X main.commit=$(git rev-parse HEAD)" ./cmd/dpi-prober
 sudo setcap cap_net_raw+ep bin/dpi-prober
-experiments/a02/batch/run.sh -confirm-targets -iface eth0 -operator "$USER" -file hosts.txt
+experiments/batch/run.sh -confirm-targets -iface eth0 -operator "$USER" -file hosts.txt
 sudo setcap -r bin/dpi-prober
 ```
 
-Диагноз по каждому домену — в `artifacts/a02-batch/batch-*/<домен>/report.md`.
+Диагноз по каждому домену — в `artifacts/batch-diagnostics/batch-*/<домен>/report.md`.
 PCAP лежит рядом. Проверка идёт до конца TLS-рукопожатия.

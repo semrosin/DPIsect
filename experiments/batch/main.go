@@ -53,7 +53,7 @@ func run(ctx context.Context, args []string) error {
 	prober := fs.String("prober", "bin/dpi-prober", "path to dpi-prober with CAP_NET_RAW for a live run")
 	confirm := fs.Bool("confirm-targets", false, "perform the listed checks after reviewing the target plan")
 	fs.Usage = func() {
-		fmt.Fprintln(fs.Output(), "Usage: experiments/a02/batch/run.sh [options] [HOST[=CONTROL] ...]")
+		fmt.Fprintln(fs.Output(), "Usage: experiments/batch/run.sh [options] [HOST[=CONTROL] ...]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -89,7 +89,7 @@ func run(ctx context.Context, args []string) error {
 	if output, err := exec.CommandContext(ctx, bin, "-version").CombinedOutput(); err != nil {
 		return fmt.Errorf("check prober: %w %s", err, strings.TrimSpace(string(output)))
 	}
-	const base = "artifacts/a02-batch"
+	const base = "artifacts/batch-diagnostics"
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		return err
 	}
