@@ -8,6 +8,7 @@
 - [Инструкции для агентов](AGENTS.md)
 - [Направление разработки](docs/DEVELOPMENT.md)
 - [Методология экспериментов](docs/EXPERIMENTS.md)
+- [Пакетная диагностика DNS, TCP и TLS](experiments/a02/batch/README.md)
 - [Безопасность сетевых проб](docs/SAFETY.md)
 - [Правила работы с Git](docs/GIT_WORKFLOW.md)
 - [Go Style](docs/GO_STYLE.md)
