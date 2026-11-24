@@ -82,7 +82,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	if err != nil {
 		return fmt.Errorf("capture interface: %w", err)
 	}
-	// Ethernet plus one VLAN tag; oversized frames may be offload aggregates.
+	// Ethernet plus one VLAN tag, checked per segment for offload records.
 	budget.maxFrameLength = iface.MTU + 18
 	if err := os.MkdirAll(filepath.Dir(cfg.RunnerLog), 0o700); err != nil {
 		return fmt.Errorf("create artifact directory: %w", err)
@@ -149,7 +149,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 	if dropsErr != nil || drops > 0 {
 		runErr = fmt.Errorf("capture drops %d, stats error: %v", drops, dropsErr)
 	}
-	if budget.packets == 0 {
+	if budget.packets == 0 && trialErr == nil {
 		runErr = errors.Join(runErr, errors.New("capture contains no matching packets"))
 	}
 	runErr = errors.Join(runErr, trialErr, closeErr)
@@ -157,7 +157,7 @@ func runObservedSeries(ctx context.Context, cfg Config, opts Options, open pairS
 		TCPOnly: cfg.TCPOnly,
 		Trials:  trials, ObservedPackets: budget.packets, ObservedBytes: budget.bytes, CaptureDrops: drops,
 		ObservedSYNRetransmissions: &budget.synRetransmissions,
-		Limitation:                 "capture counts are interface observations; offload, packet loss and NAT can differ from the physical wire",
+		Limitation:                 "budget counts include segments and repeated headers from kernel TCP offload metadata; PCAP retains the original capture records; counts may differ from the physical wire",
 	}
 	if runErr != nil {
 		obs.StopReason = runErr.Error()
