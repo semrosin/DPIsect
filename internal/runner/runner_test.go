@@ -23,6 +23,16 @@ func TestRunRefusesRawWithoutConfirmation(t *testing.T) {
 	cfg, err := Load(writeConfig(t, `question_id: D01
 experiment_id: d01-test-2026-11
 mode: raw-experiment
+sni: probe.example
+raw:
+  sequence: same_tcp
+  timeout_ms: 1000
+  fake:
+    enabled: true
+    ttl: 1
+    seq: correct
+    ack: correct
+    checksum: correct
 endpoint:
   role: helper
   ip: 192.0.2.10
@@ -55,6 +65,16 @@ func TestRunRefusesRawEvenWithConfirmation(t *testing.T) {
 	cfg, err := Load(writeConfig(t, `question_id: D01
 experiment_id: d01-test-2026-11
 mode: raw-experiment
+sni: probe.example
+raw:
+  sequence: same_tcp
+  timeout_ms: 1000
+  fake:
+    enabled: true
+    ttl: 1
+    seq: correct
+    ack: correct
+    checksum: correct
 endpoint:
   role: helper
   ip: 192.0.2.10
@@ -72,9 +92,12 @@ classification_rule: probe delivered
 		t.Fatalf("Load: %v", err)
 	}
 
-	err = Run(context.Background(), cfg, Options{AllowRaw: true})
-	if err == nil || !strings.Contains(err.Error(), "not implemented") {
-		t.Fatalf("Run with AllowRaw: err = %v, want not-implemented refusal", err)
+	err = Run(context.Background(), cfg, Options{
+		AllowRaw:   true,
+		ConfigPath: filepath.Join(t.TempDir(), "config.yaml"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "-capture-iface") {
+		t.Fatalf("Run with AllowRaw: err = %v, want capture-iface refusal", err)
 	}
 }
 
