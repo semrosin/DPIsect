@@ -63,7 +63,7 @@ ClientHello, исходный IP:порт каждой попытки в PCAP и
 ```
 
 ```bash
-GOPROXY=off go run ./experiments/c01/review -series path/to/series.json
+GOPROXY=off go run ./cmd/c01-review -series path/to/series.json
 ```
 
 Команда читает только локальные файлы. Общие поля в JSON показывают

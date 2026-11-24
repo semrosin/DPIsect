@@ -17,12 +17,12 @@ TLS-сессиях со свежей случайностью каждый Clien
 Для выбора попытки используйте её номер в плане и исходный IP:порт её SYN.
 
 ```bash
-GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./experiments/c01/review \
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go run ./cmd/c01-review \
   -plan path/to/plan.yaml -pcap path/to/client.pcap \
   -trial 1 -source 192.0.2.1:40000
 ```
 
-Команда читает локальный Ethernet PCAP и план в формате существующего
+Команда читает локальный Ethernet PCAP или PCAPNG с одного интерфейса и план в формате существующего
 runner. Она проверяет фактические байты ClientHello от начала TCP-потока
 по SYN и sequence numbers. Поддерживаются IPv4/TCP и ClientHello в одном
 или нескольких TLS records. План содержит `trials[].sni` и
@@ -61,7 +61,7 @@ IPv4-фрагментации TCP между выбранными адресам
 Для захвата без `plan.yaml` укажите файл и видимое имя TLS:
 
 ```bash
-GOPROXY=off go run ./experiments/c01/review \
+GOPROXY=off go run ./cmd/c01-review \
   -browser artifacts/c01-browser-passive-2026-11/browser.pcapng \
   -sni www.youtube.com
 ```
@@ -96,7 +96,7 @@ ClientHello, собранным из непрерывных исходящих �
 ```bash
 unshare -Urn sh -c 'ip link set lo up &&
   GOPROXY=off go test -tags privileged -v -count=1 \
-    -run "^TestC01LoopbackSegmentation$" ./experiments/c01/review'
+    -run "^TestC01LoopbackSegmentation$" ./cmd/c01-review'
 ```
 
 ## Проверка полной TLS-сессии
@@ -110,7 +110,7 @@ TLS-запись в каждом ClientHello.
 ```bash
 unshare -Urn sh -c 'ip link set lo up &&
   GOPROXY=off go test -tags privileged -v -count=3 \
-    -run "^TestC01LoopbackVerifiedTLS$" ./experiments/c01/review'
+    -run "^TestC01LoopbackVerifiedTLS$" ./cmd/c01-review'
 ```
 
 Для сохранения PCAP запускайте каждый повтор с `-count=1` и новым
@@ -125,7 +125,7 @@ unshare -Urn sh -c 'ip link set lo up &&
 
 ```bash
 GOPROXY=off go test -tags privileged -v -count=1 \
-  -run '^TestC03LoopbackReorder$' ./experiments/c01/review
+  -run '^TestC03LoopbackReorder$' ./cmd/c01-review
 ```
 
 `TestC03LoopbackVerifiedTLS` использует тот же изолированный режим и

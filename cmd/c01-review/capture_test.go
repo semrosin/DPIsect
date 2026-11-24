@@ -110,3 +110,42 @@ func TestC01InspectCapture(t *testing.T) {
 		})
 	}
 }
+
+func TestC01RejectsMultipleCaptureInterfaces(t *testing.T) {
+	t.Parallel()
+	classic := makeCapture(t, []testFrame{
+		{seq: 100, syn: true}, {seq: 101, payload: "abcd"},
+	})
+	reader, err := pcapgo.NewReader(bytes.NewReader(classic))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var capture bytes.Buffer
+	writer, err := pcapgo.NewNgWriter(&capture, layers.LinkTypeEthernet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := writer.AddInterface(pcapgo.NgInterface{LinkType: layers.LinkTypeEthernet, SnapLength: 65535})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		frame, info, err := reader.ReadPacketData()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			info.InterfaceIndex = index
+		}
+		if err := writer.WritePacket(info, frame); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = inspectCapture(&capture, testClient, testServer, []byte("abcd"))
+	if err == nil || !strings.Contains(err.Error(), "one interface") {
+		t.Fatalf("error = %v, want multiple interface error", err)
+	}
+}

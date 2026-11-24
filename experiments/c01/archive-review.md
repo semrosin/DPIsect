@@ -57,5 +57,5 @@ SHA-256 `review.json` с шестью сверенными попытками �
 
 ```bash
 python3 artifacts/c01-route-inventory/inventory.py
-GOPROXY=off go run ./experiments/c01/review -series artifacts/c01-route-inventory/series.json
+GOPROXY=off go run ./cmd/c01-review -series artifacts/c01-route-inventory/series.json
 ```

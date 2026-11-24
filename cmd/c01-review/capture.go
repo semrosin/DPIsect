@@ -77,6 +77,7 @@ func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []by
 	seen := make([]bool, len(planned))
 	var base uint32
 	var haveSYN bool
+	var interfaceIndex int
 	remaining := len(planned)
 	for number := 1; ; number++ {
 		data, info, err := reader.ReadPacketData()
@@ -85,6 +86,11 @@ func inspectCapture(input io.Reader, client, server netip.AddrPort, planned []by
 		}
 		if err != nil {
 			return result, fmt.Errorf("read frame %d: %w", number, err)
+		}
+		if number == 1 {
+			interfaceIndex = info.InterfaceIndex
+		} else if info.InterfaceIndex != interfaceIndex {
+			return result, errors.New("capture must use one interface")
 		}
 		tcp, incoming, err := flowPacket(data, info, client, server)
 		if err != nil {
