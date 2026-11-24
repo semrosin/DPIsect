@@ -1,0 +1,25 @@
+{
+  "experiment_id": "d02-out-of-order-2026-11",
+  "question_id": "D02",
+  "tool_version": "0.1.0-stage4",
+  "tool_commit": "4e1cd8c-dirty",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-24T16:32:31Z",
+  "finished_utc": "2026-11-24T16:32:31Z",
+  "operator": "root",
+  "config_file": "experiments/stage4-d01-d04-2026-11/runs/d02-out-of-order-2026-11/config.yaml",
+  "lab_config_id": "netns-router-2026-11",
+  "artifacts": {
+    "experiments/stage4-d01-d04-2026-11/runs/d02-out-of-order-2026-11/raw-observations.json": "90f5ff0de943e9653b76ad6fedb468b56cf8523e3b6409efcd43b7144e1a80c7",
+    "artifacts/d02-out-of-order-2026-11/client.pcap": "fe03e620c19f2e57c910e71a849bfa69ba56b206c68deff85f4cd9b35cbce0c5",
+    "artifacts/d02-out-of-order-2026-11/helper.log": "5ceb1387c71e72d6bac8f8e427d9605d633b54de30ef0f70807953a10e0541bd",
+    "artifacts/d02-out-of-order-2026-11/runner.log": "1527025a2136983143897968785c17bf718b8dc7f7efd6f33f9a34f6f9806ffd",
+    "artifacts/d02-out-of-order-2026-11/server.pcap": "bc21fa04494f94289164e86758643bfb56ef2956b8a0f4dddf322cbeaa1b0d3d"
+  }
+}

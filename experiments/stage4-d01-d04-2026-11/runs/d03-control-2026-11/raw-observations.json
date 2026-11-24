@@ -1,0 +1,36 @@
+{
+  "experiment_id": "d03-control-2026-11",
+  "question_id": "D03",
+  "mode": "raw-experiment",
+  "sequence": "fresh_tcp",
+  "trials": [
+    {
+      "repetition": 1,
+      "started_utc": "2026-11-24T16:32:32.397472771Z",
+      "finished_utc": "2026-11-24T16:32:32.71730964Z",
+      "sequence": "fresh_tcp",
+      "fake_sent": true,
+      "fake_bytes": 139,
+      "fake_payload_sha256": "a09877a59dee0576dce51a9aa89b8d57791cb5b46426c9352c1911cf723904ac",
+      "fake_ttl": 64,
+      "fake_seq_mode": "correct",
+      "fake_ack_mode": "correct",
+      "fake_checksum_mode": "correct",
+      "fake_seq": 3511749768,
+      "fake_ack": 2140393353,
+      "fake_checksum": 608,
+      "flow": {
+        "SrcIP": "10.77.1.2",
+        "DstIP": "10.77.2.2",
+        "SrcPort": 59002,
+        "DstPort": 8443,
+        "SndNxt": 3511749768,
+        "RcvNxt": 2140393353,
+        "Window": 64240
+      },
+      "real_client_hello_bytes": 139,
+      "real_payload_sha256": "a45847201297c4597b476ef1b11d528b9d1fea29c430eda0ba72b96a4e93f406",
+      "real_client_hello_written": true
+    }
+  ]
+}
