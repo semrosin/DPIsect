@@ -7,11 +7,12 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"golang.org/x/sys/unix"
 )
 
 // wireBudget belongs to one capture reader; it must not be shared by writers.
-// Counts describe observed Ethernet frames, not a guarantee of physical-wire
-// packets when capture loses data or interface offloads are active.
+// Counts include segments represented by supported kernel offload records.
+// They are capture-based estimates, not counts from the physical link.
 type wireBudget struct {
 	ip                 net.IP
 	port               layers.TCPPort
@@ -49,6 +50,11 @@ type flowState struct {
 	ranges  []sequenceRange
 }
 
+type wireGSO struct {
+	kind        byte
+	payloadSize int
+}
+
 func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
 	addr := net.ParseIP(ip).To4()
 	if addr == nil || port < 1 || port > 65535 || limits.MaxPackets <= 0 || limits.MaxBytes <= 0 || limits.MaxRatePPS <= 0 {
@@ -63,7 +69,7 @@ func newWireBudget(ip string, port int, limits Budget) (*wireBudget, error) {
 // observe returns an error once an observed limit is reached or the frame
 // cannot be accounted for. An asynchronous capture cannot prevent an already
 // transmitted packet or guarantee that every frame was observed.
-func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) error {
+func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time, gso wireGSO) error {
 	b.lastMatching = false
 	if originalLength != len(frame) {
 		return fmt.Errorf("wire budget: incomplete capture")
@@ -93,15 +99,16 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 		return nil
 	}
 	b.lastMatching = true
-	b.packets++
-	b.bytes += originalLength
+	segments, octets, err := b.frameCost(p, ip, tcp, originalLength, gso)
+	if err != nil {
+		return err
+	}
+	b.packets += segments
+	b.bytes += octets
 	if !b.lastObserved.IsZero() && now.Before(b.lastObserved) {
 		return fmt.Errorf("wire budget: capture timestamps are out of order")
 	}
 	b.lastObserved = now
-	if b.maxFrameLength > 0 && originalLength > b.maxFrameLength {
-		return fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance; offload may obscure packet counts")
-	}
 	if toTarget && tcp.DstPort == b.port {
 		if err := b.observeOutgoing(ip, tcp); err != nil {
 			return err
@@ -129,13 +136,46 @@ func (b *wireBudget) observe(frame []byte, originalLength int, now time.Time) er
 		}
 	}
 	b.recent = b.recent[:keep]
-	if toTarget && tcp.DstPort == b.port {
-		b.recent = append(b.recent, now)
+	rate := len(b.recent)
+	outgoing := toTarget && tcp.DstPort == b.port
+	if outgoing {
+		rate += segments
 	}
-	if b.packets >= wireStopThreshold(b.limits.MaxPackets) || b.bytes >= wireStopThreshold(b.limits.MaxBytes) || len(b.recent) >= wireStopThreshold(b.limits.MaxRatePPS) {
-		return fmt.Errorf("wire budget: observed limit reached (%d packets, %d bytes, %d outgoing packets in one second)", b.packets, b.bytes, len(b.recent))
+	if b.packets >= wireStopThreshold(b.limits.MaxPackets) || b.bytes >= wireStopThreshold(b.limits.MaxBytes) || rate >= wireStopThreshold(b.limits.MaxRatePPS) {
+		return fmt.Errorf("wire budget: observed limit reached (%d packets, %d bytes, %d outgoing packets in one second)", b.packets, b.bytes, rate)
+	}
+	if outgoing {
+		for range segments {
+			b.recent = append(b.recent, now)
+		}
 	}
 	return nil
+}
+
+func (b *wireBudget) frameCost(p gopacket.Packet, ip *layers.IPv4, tcp *layers.TCP, length int, gso wireGSO) (int, int, error) {
+	if gso == (wireGSO{}) {
+		if b.maxFrameLength > 0 && length > b.maxFrameLength {
+			return 0, 0, fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance (%d > %d bytes) without TCP segmentation metadata", length, b.maxFrameLength)
+		}
+		return 1, length, nil
+	}
+	payload := len(tcp.Payload)
+	headers := len(p.LinkLayer().LayerContents()) + len(ip.Contents) + len(tcp.Contents)
+	if vlan := p.Layer(layers.LayerTypeDot1Q); vlan != nil {
+		headers += len(vlan.LayerContents())
+	}
+	if gso.kind&^unix.VIRTIO_NET_HDR_GSO_ECN != unix.VIRTIO_NET_HDR_GSO_TCPV4 ||
+		gso.payloadSize <= 0 || payload == 0 || headers+payload != length || tcp.SYN || tcp.RST || tcp.URG {
+		return 0, 0, fmt.Errorf("wire budget: cannot account for IPv4 TCP offload record (type %#x, segment payload %d, frame %d bytes)", gso.kind, gso.payloadSize, length)
+	}
+	if segmentLength := headers + min(gso.payloadSize, payload); b.maxFrameLength > 0 && segmentLength > b.maxFrameLength {
+		return 0, 0, fmt.Errorf("wire budget: matching frame exceeds interface MTU allowance: offload segment is %d bytes, limit is %d", segmentLength, b.maxFrameLength)
+	}
+	segments := (payload-1)/gso.payloadSize + 1
+	const minEthernetFrame = 60 // Ethernet header and padding, without FCS.
+	lastPayload := payload - (segments-1)*gso.payloadSize
+	octets := (segments-1)*max(minEthernetFrame, headers+gso.payloadSize) + max(minEthernetFrame, headers+lastPayload)
+	return segments, octets, nil
 }
 
 // observeOutgoing detects overlapping TCP sequence space for data and FIN.

@@ -40,7 +40,11 @@ func monitorWire(ctx context.Context, source wireSource, budget *wireBudget, can
 			cancel()
 			return errors.New("wire monitor: capture timestamp is missing")
 		}
-		budgetErr := budget.observe(frame, ci.Length, ci.Timestamp)
+		var gso wireGSO
+		if len(ci.AncillaryData) != 0 {
+			gso, _ = ci.AncillaryData[0].(wireGSO)
+		}
+		budgetErr := budget.observe(frame, ci.Length, ci.Timestamp, gso)
 		if budget.lastMatching {
 			if err := source.Record(frame, ci); err != nil {
 				cancel()
