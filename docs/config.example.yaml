@@ -68,3 +68,16 @@ classification_rule: |
   control profile succeeds and the treatment profile is blocked across
   all repetitions with identical budget and schedule; refuted if the
   treatment succeeds; inconclusive if observations are insufficient.
+
+# Raw-experiment sequence (required for mode raw-experiment; D01–D04).
+# Only one of ttl/seq/ack/checksum may differ from correct in an arm.
+# raw:
+#   sequence: same_tcp # same_tcp | fresh_tcp
+#   timeout_ms: 5000
+#   fake:
+#     enabled: true
+#     ttl: 64 # 1 changes D01; must be 1-255
+#     seq: correct # correct | out_of_order | old
+#     ack: correct # correct | wrong
+#     checksum: correct # correct | corrupt
+#     send_after_ms: 0
