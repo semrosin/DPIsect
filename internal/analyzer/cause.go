@@ -107,14 +107,17 @@ const (
 )
 
 type tcpPacket struct {
-	ts      time.Time
-	srcIP   [4]byte
-	dstIP   [4]byte
-	srcPort uint16
-	dstPort uint16
-	seq     uint32
-	flags   uint8
-	payload []byte
+	ts       time.Time
+	srcIP    [4]byte
+	dstIP    [4]byte
+	srcPort  uint16
+	dstPort  uint16
+	seq      uint32
+	ack      uint32
+	checksum uint16
+	ttl      uint8
+	flags    uint8
+	payload  []byte
 }
 
 func readTCPPackets(ctx context.Context, r *pcapgo.Reader) ([]tcpPacket, error) {
@@ -176,6 +179,9 @@ func parseEthernetTCP(frame []byte) (tcpPacket, bool) {
 	p.srcPort = uint16(tcp[0])<<8 | uint16(tcp[1])
 	p.dstPort = uint16(tcp[2])<<8 | uint16(tcp[3])
 	p.seq = uint32(tcp[4])<<24 | uint32(tcp[5])<<16 | uint32(tcp[6])<<8 | uint32(tcp[7])
+	p.ack = uint32(tcp[8])<<24 | uint32(tcp[9])<<16 | uint32(tcp[10])<<8 | uint32(tcp[11])
+	p.checksum = uint16(tcp[16])<<8 | uint16(tcp[17])
+	p.ttl = ip[8]
 	dataOff := int(tcp[12]>>4) * 4
 	if dataOff < 20 || dataOff > len(tcp) {
 		return p, false
