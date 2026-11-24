@@ -1,0 +1,25 @@
+{
+  "experiment_id": "d03-wrong-ack-2026-11",
+  "question_id": "D03",
+  "tool_version": "0.1.0-stage4",
+  "tool_commit": "4e1cd8c-dirty",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-24T16:32:42Z",
+  "finished_utc": "2026-11-24T16:32:43Z",
+  "operator": "root",
+  "config_file": "experiments/stage4-d01-d04-2026-11/runs/d03-wrong-ack-2026-11/config.yaml",
+  "lab_config_id": "netns-router-2026-11",
+  "artifacts": {
+    "experiments/stage4-d01-d04-2026-11/runs/d03-wrong-ack-2026-11/raw-observations.json": "69d30d9837f3b242b200627ee1ebd696f51361612a9b14b4cbc3cf3cf1430411",
+    "artifacts/d03-wrong-ack-2026-11/client.pcap": "76c8c99001762ed722d0c1c56ac086082e71f70ccfccd2418f935dac41f565a3",
+    "artifacts/d03-wrong-ack-2026-11/helper.log": "b4a0155b6aaa0cd203e1bd85d980880d34d55bae7b19150a7cc205eb00ab9c62",
+    "artifacts/d03-wrong-ack-2026-11/runner.log": "f7d07ff4af449f0fbe88dcce0696fa8fb42bd5ff81196c7900716a362b386e7c",
+    "artifacts/d03-wrong-ack-2026-11/server.pcap": "fb97ae84875bd6acac9a9ed6fc102878ef2cc60912844c31134536f8615f4a64"
+  }
+}

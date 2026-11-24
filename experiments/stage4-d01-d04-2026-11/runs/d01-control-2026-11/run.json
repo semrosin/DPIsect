@@ -1,0 +1,25 @@
+{
+  "experiment_id": "d01-control-2026-11",
+  "question_id": "D01",
+  "tool_version": "0.1.0-stage4",
+  "tool_commit": "4e1cd8c-dirty",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "golang.org/x/net": "v0.0.0-20190620200207-3b0461eec859",
+    "golang.org/x/sys": "v0.0.0-20190412213103-97732733099d",
+    "gopkg.in/yaml.v3": "v3.0.1"
+  },
+  "seed": 42,
+  "started_utc": "2026-11-24T16:32:27Z",
+  "finished_utc": "2026-11-24T16:32:28Z",
+  "operator": "root",
+  "config_file": "experiments/stage4-d01-d04-2026-11/runs/d01-control-2026-11/config.yaml",
+  "lab_config_id": "netns-router-2026-11",
+  "artifacts": {
+    "experiments/stage4-d01-d04-2026-11/runs/d01-control-2026-11/raw-observations.json": "c340d8f6aaed95bb2b9a79dc1f79ff9b363b5b6ab013837b1ec06fd299d8f381",
+    "artifacts/d01-control-2026-11/client.pcap": "efbb778e7e014df87df329e40fec6812e6a73aecb9b32f18e6f9a344582ae7c2",
+    "artifacts/d01-control-2026-11/helper.log": "f38d1ec18700c84e51611976e51e3993974ec6d42c14774c930e37c0097d257c",
+    "artifacts/d01-control-2026-11/runner.log": "732beecee04b32555736f1df5dd558ba849beff9f76f2c963d3d90b8bda76103",
+    "artifacts/d01-control-2026-11/server.pcap": "89d30b3e7d633d78189d3cbd0833216af06542964c4d6d869086176c356ab8a9"
+  }
+}

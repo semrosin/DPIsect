@@ -244,3 +244,102 @@ func TestDefaultBudgetMatchesSafetyLimits(t *testing.T) {
 		t.Errorf("MaxDurationS = %d, want 60", b.MaxDurationS)
 	}
 }
+
+const rawConfig = `question_id: D02
+experiment_id: d02-test-2026-11
+mode: raw-experiment
+sni: probe.example
+endpoint:
+  role: helper
+  ip: 192.0.2.10
+  port: 8443
+schedule:
+  repetitions: 1
+  seed: 42
+capture:
+  client: artifacts/d02-test-2026-11/client.pcap
+  server: artifacts/d02-test-2026-11/server.pcap
+runner_log: artifacts/d02-test-2026-11/runner.log
+classification_rule: probe delivered
+raw:
+  sequence: same_tcp
+  fake:
+    enabled: true
+    ttl: 1
+    seq: out_of_order
+    ack: correct
+    checksum: correct
+`
+
+func TestLoadRawDefaultsAndValidation(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Load(writeConfig(t, rawConfig))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Raw == nil || cfg.Raw.Sequence != RawSequenceSameTCP ||
+		cfg.Raw.TimeoutMS != defaultRawTimeoutMS {
+		t.Fatalf("raw defaults = %+v", cfg.Raw)
+	}
+	if cfg.Raw.Fake.Seq != RawFieldOutOfOrder || cfg.Raw.Fake.TTL != 1 {
+		t.Errorf("fake = %+v, want seq out_of_order ttl 1", cfg.Raw.Fake)
+	}
+}
+
+func TestLoadRejectsInvalidRaw(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mutate  func(string) string
+		wantErr string
+	}{
+		{
+			name: "raw block on valid-session",
+			mutate: func(s string) string {
+				s = strings.Replace(s, "mode: raw-experiment", "mode: valid-session", 1)
+				return s
+			},
+			wantErr: "raw block is only valid",
+		},
+		{
+			name: "raw without block",
+			mutate: func(s string) string {
+				return strings.Split(s, "raw:")[0]
+			},
+			wantErr: "raw block is required",
+		},
+		{
+			name: "fresh tcp without fake",
+			mutate: func(s string) string {
+				s = strings.Replace(s, "sequence: same_tcp", "sequence: fresh_tcp", 1)
+				return strings.Replace(s, "enabled: true", "enabled: false", 1)
+			},
+			wantErr: "fresh_tcp requires",
+		},
+		{
+			name: "unknown seq mode",
+			mutate: func(s string) string {
+				return strings.Replace(s, "seq: out_of_order", "seq: bogus", 1)
+			},
+			wantErr: "raw.fake.seq",
+		},
+		{
+			name: "unknown checksum mode",
+			mutate: func(s string) string {
+				return strings.Replace(s, "checksum: correct", "checksum: bogus", 1)
+			},
+			wantErr: "raw.fake.checksum",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Load(writeConfig(t, tt.mutate(rawConfig)))
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
