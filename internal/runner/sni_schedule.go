@@ -35,3 +35,14 @@ func pairedVariant(index int) string {
 	}
 	return "treatment"
 }
+
+func splitVariant(index int, split *PairedSplit) string {
+	variant := pairedVariant(index)
+	if split != nil && split.First == "treatment" {
+		if variant == "control" {
+			return "treatment"
+		}
+		return "control"
+	}
+	return variant
+}

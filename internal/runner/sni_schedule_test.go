@@ -46,3 +46,23 @@ func TestPairedSNIScheduleRejectsInvalidInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestC01SplitVariantOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		first string
+		want  []string
+	}{
+		{name: "control_first", first: "control", want: []string{"control", "treatment", "treatment", "control"}},
+		{name: "treatment_first", first: "treatment", want: []string{"treatment", "control", "control", "treatment"}},
+		{name: "historical_default", want: []string{"control", "treatment", "treatment", "control"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for i, want := range tc.want {
+				if got := splitVariant(i, &PairedSplit{First: tc.first}); got != want {
+					t.Fatalf("trial %d: got %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}

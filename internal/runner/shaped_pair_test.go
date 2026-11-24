@@ -150,3 +150,60 @@ paired_hello:
 		t.Fatal("identical SNI and profiles cannot form a comparison")
 	}
 }
+
+func TestC01SplitPlan(t *testing.T) {
+	dir := t.TempDir()
+	config := runConfigYAML("127.0.0.1", 443, 2, 100, dir) + `paired_sni: control.example
+paired_split: {control: 0, treatment: 32}
+`
+	config = strings.Replace(config, "question_id: H01", "question_id: C01", 1)
+	config = strings.Replace(config, "experiment_id: h01-", "experiment_id: c01-", 1)
+	configPath := writeRunConfig(t, dir, config)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, sessions, err := prepareSNIWirePlan(context.Background(), cfg, configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, session := range sessions {
+			session.Close()
+		}
+	}()
+	want := []int{0, 32, 32, 0}
+	for i, trial := range plan.Trials {
+		offsets := trial.Packet.SplitOffsets
+		if (want[i] == 0 && len(offsets) != 0) || (want[i] != 0 && (len(offsets) != 1 || offsets[0] != want[i])) {
+			t.Fatalf("trial %d offsets = %v, want %d", i, offsets, want[i])
+		}
+	}
+}
+
+func TestC01SplitExplicitTreatmentFirst(t *testing.T) {
+	dir := t.TempDir()
+	config := runConfigYAML("127.0.0.1", 443, 1, 100, dir) + `paired_sni: treatment.example
+paired_split: {control: 0, treatment: 32, first: treatment}
+`
+	configPath := writeRunConfig(t, dir, config)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, sessions, err := prepareSNIWirePlan(context.Background(), cfg, configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, session := range sessions {
+			session.Close()
+		}
+	}()
+	if plan.Trials[0].SNI != "treatment.example" || plan.Trials[0].Variant != "treatment" ||
+		len(plan.Trials[0].Packet.SplitOffsets) != 1 || plan.Trials[0].Packet.SplitOffsets[0] != 32 ||
+		plan.Trials[1].SNI != "control.example" || plan.Trials[1].Variant != "control" ||
+		len(plan.Trials[1].Packet.SplitOffsets) != 0 {
+		t.Fatalf("unexpected trial order: %+v", plan.Trials)
+	}
+}

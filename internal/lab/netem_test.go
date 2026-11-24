@@ -231,3 +231,11 @@ func TestExecCommanderErrorCarriesOutput(t *testing.T) {
 		t.Errorf("error %q must carry command output", err)
 	}
 }
+
+func TestResetToleratesDefaultQdisc(t *testing.T) {
+	t.Parallel()
+	f := &fakeCmd{err: errors.New("Error: Cannot delete qdisc with handle of zero.")}
+	if err := New("lo", f).Reset(context.Background()); err != nil {
+		t.Fatalf("Reset default qdisc: %v", err)
+	}
+}

@@ -45,6 +45,8 @@ type Config struct {
 	PairedCloseDelayMS int `yaml:"paired_close_delay_ms,omitempty"`
 	// PairedHello enables independently shaped ClientHellos for B04/B07.
 	PairedHello *PairedHello `yaml:"paired_hello,omitempty"`
+	// PairedSplit selects intended first-write boundaries for C01.
+	PairedSplit *PairedSplit `yaml:"paired_split,omitempty"`
 	// TCPOnly runs ordinary TCP connectivity controls without application data.
 	TCPOnly      bool         `yaml:"tcp_only,omitempty"`
 	TCPTimeoutMS int          `yaml:"tcp_timeout_ms,omitempty"`
@@ -60,6 +62,13 @@ type Config struct {
 	ClassificationRule string    `yaml:"classification_rule"`
 	Preflight          Preflight `yaml:"preflight"`
 	Lab                Lab       `yaml:"lab"`
+}
+
+// PairedSplit specifies offsets for alternating control and treatment trials.
+type PairedSplit struct {
+	Control   int    `yaml:"control"`
+	Treatment int    `yaml:"treatment"`
+	First     string `yaml:"first,omitempty"`
 }
 
 // HelloVariant defines exact ClientHello coordinates and ignored bytes.
@@ -265,6 +274,17 @@ func (c Config) Validate() error {
 	if !c.TCPOnly && c.TCPTimeoutMS != 0 {
 		errs = append(errs, errors.New("tcp_timeout_ms requires tcp_only"))
 	}
+	if c.PairedSplit != nil {
+		if c.PairedSplit.First != "" && c.PairedSplit.First != "control" && c.PairedSplit.First != "treatment" {
+			errs = append(errs, errors.New("paired_split.first must be control or treatment"))
+		}
+		if c.PairedSplit.First != "" && (c.PairedSplit.Control != 0 || c.PairedSplit.Treatment <= 0) {
+			errs = append(errs, errors.New("explicit split order requires unsplit control and positive treatment offset"))
+		}
+		if c.PairedSNI == "" || c.TCPOnly || c.PairedSplit.Control < 0 || c.PairedSplit.Treatment < 0 || c.PairedSplit.Control == c.PairedSplit.Treatment {
+			errs = append(errs, errors.New("paired_split requires paired_sni and distinct nonnegative offsets"))
+		}
+	}
 	if c.PairedHello != nil {
 		if c.PairedSNI == "" || c.TCPOnly {
 			errs = append(errs, errors.New("paired_hello requires paired_sni"))
@@ -274,7 +294,7 @@ func (c Config) Validate() error {
 				errs = append(errs, errors.New("paired_hello requires valid record lengths, SNI offsets and ignored data"))
 			}
 		}
-		if strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
+		if c.PairedSplit == nil && strings.EqualFold(c.SNI, c.PairedSNI) && c.PairedHello.Control == c.PairedHello.Treatment {
 			errs = append(errs, errors.New("paired_hello variants must differ when SNI is identical"))
 		}
 	}
@@ -297,7 +317,7 @@ func (c Config) Validate() error {
 		if modeErr == nil && mode != generator.ValidSession {
 			errs = append(errs, errors.New("paired_sni requires valid-session mode"))
 		}
-		if _, err := pairedSNIScheduleFor(c.SNI, c.PairedSNI, 1, c.PairedHello != nil); err != nil {
+		if _, err := pairedSNIScheduleFor(c.SNI, c.PairedSNI, 1, c.PairedHello != nil || c.PairedSplit != nil); err != nil {
 			errs = append(errs, err)
 		}
 		if c.Schedule.Repetitions > c.Budget.MaxPackets/2 {

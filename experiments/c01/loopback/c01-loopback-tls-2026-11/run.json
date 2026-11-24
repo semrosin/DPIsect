@@ -1,0 +1,158 @@
+{
+  "experiment_id": "c01-loopback-tls-2026-11",
+  "question_id": "C01",
+  "tool_commit": "5f544df3c79062e6bef22fce2bab5273512f8f0e",
+  "go_version": "go version go1.27.3 linux/amd64",
+  "kernel": "6.6.87.2-microsoft-standard-WSL2",
+  "operator": "Codex",
+  "started_utc": "2026-11-20T15:53:50Z",
+  "finished_utc": "2026-11-20T15:53:54Z",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "github.com/refraction-networking/utls": "v1.8.2",
+    "golang.org/x/net": "v0.38.0",
+    "golang.org/x/sys": "v0.31.0",
+    "gopkg.in/yaml.v3": "v3.0.1",
+    "github.com/andybalholm/brotli": "v1.0.6",
+    "github.com/klauspost/compress": "v1.17.4",
+    "golang.org/x/crypto": "v0.36.0"
+  },
+  "plan_file": "experiments/c01/loopback/c01-loopback-tls-2026-11/plan.yaml",
+  "plan_sha256": "9945e5551b5b40eb2bc8f5639253442f6418baddbb6b46e5cfa7e2d69dec789f",
+  "trials": [
+    {
+      "repetition": 1,
+      "variant": "C01_TLS_control",
+      "client": "127.0.0.1:37734",
+      "server": "127.0.0.1:39663",
+      "tcp_split_offsets": [],
+      "first_seen_offsets": [
+        0
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "2e3ef47387c9feb82f84efd728dc32cb46e7f1d3af168e745917f58fc180f963",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 13,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-1/C01_TLS_control.pcap"
+    },
+    {
+      "repetition": 1,
+      "variant": "C01_TLS_two_segments",
+      "client": "127.0.0.1:34126",
+      "server": "127.0.0.1:38925",
+      "tcp_split_offsets": [
+        32
+      ],
+      "first_seen_offsets": [
+        0,
+        32
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "9a745c6a7124c2f1548e10835a34ccbeb645366d0a63a2417a889cb3a5f43f6a",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 15,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-1/C01_TLS_two_segments.pcap"
+    },
+    {
+      "repetition": 2,
+      "variant": "C01_TLS_control",
+      "client": "127.0.0.1:42728",
+      "server": "127.0.0.1:41381",
+      "tcp_split_offsets": [],
+      "first_seen_offsets": [
+        0
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "a1d1118fe04332267760d1e4853b62afac0790da5de1fdecd03199e8bfc5822e",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 13,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-2/C01_TLS_control.pcap"
+    },
+    {
+      "repetition": 2,
+      "variant": "C01_TLS_two_segments",
+      "client": "127.0.0.1:36310",
+      "server": "127.0.0.1:45521",
+      "tcp_split_offsets": [
+        32
+      ],
+      "first_seen_offsets": [
+        0,
+        32
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "749d94a85b23f7f1ad8fa8e44700ad3b00561004059ca23043a8f5841dcc663f",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 15,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-2/C01_TLS_two_segments.pcap"
+    },
+    {
+      "repetition": 3,
+      "variant": "C01_TLS_control",
+      "client": "127.0.0.1:53224",
+      "server": "127.0.0.1:40655",
+      "tcp_split_offsets": [],
+      "first_seen_offsets": [
+        0
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "92505eaeba57a2ad7dd86665bcce216751c2927bdf34414bc9453bf95ba93527",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 13,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-3/C01_TLS_control.pcap"
+    },
+    {
+      "repetition": 3,
+      "variant": "C01_TLS_two_segments",
+      "client": "127.0.0.1:33866",
+      "server": "127.0.0.1:39289",
+      "tcp_split_offsets": [
+        32
+      ],
+      "first_seen_offsets": [
+        0,
+        32
+      ],
+      "tls_record_ends": [
+        255
+      ],
+      "client_hello_sha256": "cd94b824555be64f763d6a2846883fbb89bd2495737cb6118433e85b2d3beba6",
+      "tls": "1.3",
+      "cipher": "TLS_AES_128_GCM_SHA256",
+      "http_response_matched": true,
+      "frames": 16,
+      "pcap": "artifacts/c01-loopback-tls-2026-11/run-3/C01_TLS_two_segments.pcap"
+    }
+  ],
+  "artifacts": {
+    "artifacts/c01-loopback-tls-2026-11/run-1/test.log": "f168728a18351b95050b795d31bf1681b6b13ac7edbe28917cc7e04ae1282e69",
+    "artifacts/c01-loopback-tls-2026-11/run-1/C01_TLS_control.pcap": "6c0d89d23b9bfd85bf0f5b850816e8f9b23747b5a48a07743ff51c53940becde",
+    "artifacts/c01-loopback-tls-2026-11/run-1/C01_TLS_two_segments.pcap": "7a57d594fcd83a623d60e4a86ec46a8060335cdb2653daff7e3d3c8065a62cda",
+    "artifacts/c01-loopback-tls-2026-11/run-2/test.log": "801627dadc276b288aa00d00903bde4ca3730113fccb8deac5e82c2bb0a49e0f",
+    "artifacts/c01-loopback-tls-2026-11/run-2/C01_TLS_control.pcap": "b2912251148fa339154f92557e0ba521c82cde972e5a3fddc6a6450aaf28cb50",
+    "artifacts/c01-loopback-tls-2026-11/run-2/C01_TLS_two_segments.pcap": "a4512bfa57bf662e39f75eaa0936e4afcc04f007060943604f24c3cc9e23428f",
+    "artifacts/c01-loopback-tls-2026-11/run-3/test.log": "56dbf0ef730575bdcbf77446516803331cf19bf9a51167588dbe3f487d3e6edc",
+    "artifacts/c01-loopback-tls-2026-11/run-3/C01_TLS_control.pcap": "6effdc94ab85072608f50b0eeb61077ff12369b49f2bfbbdbb3e01abac03cd38",
+    "artifacts/c01-loopback-tls-2026-11/run-3/C01_TLS_two_segments.pcap": "236408b31153b73dc0722436f90393588d4a3c8a1f9472573bf524b91de91377"
+  }
+}

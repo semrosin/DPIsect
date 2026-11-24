@@ -1,0 +1,62 @@
+{
+  "experiment_id": "c03-loopback-order-2026-11",
+  "question_id": "C03",
+  "tool_commit": "94ee8aa8955d264e20d26379c2f7c9d641de0465",
+  "go_version": "go version go1.27.3 linux/amd64",
+  "kernel": "6.6.87.2-microsoft-standard-WSL2",
+  "tc_version": "tc utility, iproute2-6.19.0, libbpf 1.6.3",
+  "dependency_versions": {
+    "github.com/google/gopacket": "v1.1.19",
+    "github.com/refraction-networking/utls": "v1.8.2",
+    "golang.org/x/net": "v0.38.0",
+    "golang.org/x/sys": "v0.31.0",
+    "gopkg.in/yaml.v3": "v3.0.1",
+    "github.com/andybalholm/brotli": "v1.0.6",
+    "github.com/klauspost/compress": "v1.17.4",
+    "golang.org/x/crypto": "v0.36.0"
+  },
+  "operator": "Codex",
+  "started_utc": "2026-11-20T15:12:46Z",
+  "finished_utc": "2026-11-20T15:12:48Z",
+  "plan_file": "experiments/c03/loopback/c03-loopback-order-2026-11/plan.yaml",
+  "plan_sha256": "fdda59182476417f707cb9303d16d44422cbfea027eaae62afa4e462865e42e3",
+  "trials": {
+    "C03_in_order": {
+      "client": "127.0.0.1:43804",
+      "server": "127.0.0.1:43917",
+      "tcp_split_offsets": [
+        48
+      ],
+      "first_seen_offsets": [
+        0,
+        48
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "49f18a1032335de8a9cb7cf8d3f7cd68bed2c9aa04cac34a21e16a06c88f485d",
+      "frames": 8,
+      "ethernet_bytes": 687,
+      "pcap": "artifacts/c03-loopback-order-2026-11/C03_in_order.pcap"
+    },
+    "C03_reversed": {
+      "client": "127.0.0.1:34042",
+      "server": "127.0.0.1:38131",
+      "tcp_split_offsets": [
+        48
+      ],
+      "first_seen_offsets": [
+        48,
+        0
+      ],
+      "client_hello_bytes": 142,
+      "client_hello_sha256": "49f18a1032335de8a9cb7cf8d3f7cd68bed2c9aa04cac34a21e16a06c88f485d",
+      "frames": 8,
+      "ethernet_bytes": 699,
+      "pcap": "artifacts/c03-loopback-order-2026-11/C03_reversed.pcap"
+    }
+  },
+  "artifacts": {
+    "artifacts/c03-loopback-order-2026-11/test.log": "f44e374d5da2150685200a996b444473f3107d3a4f71880ba8ce024a0e81b2b5",
+    "artifacts/c03-loopback-order-2026-11/C03_in_order.pcap": "d6955463e8049502486b71fbe0c216d066a516d4c8f350ba9e50442edbbbfe62",
+    "artifacts/c03-loopback-order-2026-11/C03_reversed.pcap": "35b84a75d4d5c392bffb587d07e2c02a9e89d1114d06366899ee673287a85902"
+  }
+}
