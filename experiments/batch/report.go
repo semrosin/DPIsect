@@ -22,63 +22,169 @@ type trial struct {
 	WireNote    string                       `json:"-"`
 }
 
+type seriesResult struct {
+	Profile      probeProfileSpec `json:"-"`
+	Budget       runner.Budget    `json:"-"`
+	Err          error            `json:"-"`
+	Trials       []trial          `json:"trials"`
+	Packets      int              `json:"observed_packets"`
+	Bytes        int              `json:"observed_ethernet_bytes"`
+	CaptureDrops uint             `json:"capture_drops"`
+	StopReason   string           `json:"stop_reason"`
+}
+
 type report struct {
 	Host, DNSError            string
 	Control, RequestedControl string
 	ControlDNSFailed          bool
-	Operator, ExperimentID    string
+	Operator, BatchID         string
 	Started                   time.Time
-	Budget                    runner.Budget
 	IP                        netip.Addr
-	CaptureError              error
-	Series                    struct {
-		Trials       []trial `json:"trials"`
-		Packets      int     `json:"observed_packets"`
-		Bytes        int     `json:"observed_ethernet_bytes"`
-		CaptureDrops uint    `json:"capture_drops"`
-		StopReason   string  `json:"stop_reason"`
+	SetupError                error
+	Runs                      []seriesResult
+}
+
+func (s seriesResult) targetTrial(control string) *trial {
+	var best *trial
+	for i := range s.Trials {
+		t := &s.Trials[i]
+		if control != "" && t.SNI == control {
+			continue
+		}
+		if t.Observation.Stage == "complete" {
+			return t
+		}
+		if best == nil || t.phase() > best.phase() {
+			best = t
+		}
+	}
+	return best
+}
+
+func (s seriesResult) connected() bool {
+	t := s.targetTrial("")
+	return s.Err == nil && t != nil && t.Observation.Stage == "complete"
+}
+
+func (s seriesResult) silentHello(t *trial) bool {
+	if s.Err != nil || t == nil || t.WireNote != "" || t.Observation.Stage != "tls" {
+		return false
+	}
+	w := t.Wire
+	timedOut := t.Observation.Error == context.DeadlineExceeded.Error()
+	retried := w.DataRepeat && strings.Contains(s.StopReason, "outgoing data or FIN retransmission")
+	return w.SYNACK && w.HelloBytes > 0 && !w.ServerData && !w.Reset && (timedOut || retried)
+}
+
+func (s seriesResult) outcome(control string) string {
+	t := s.targetTrial(control)
+	switch {
+	case s.Err != nil:
+		return "Ошибка измерения — " + inline(s.Err.Error())
+	case t == nil:
+		return "Попытка ресурса не началась"
+	case t.Observation.Stage == "complete" && s.Profile.tcpOnly:
+		return "TCP подключился"
+	case t.Observation.Stage == "complete":
+		if control == "" && len(s.Trials) == 2 && s.Trials[0].Observation.Stage != s.Trials[1].Observation.Stage {
+			return "TLS прошёл в одной из двух попыток"
+		}
+		return "TLS и проверка сертификата прошли"
+	default:
+		return strings.TrimSuffix(t.outcome(), ".")
 	}
 }
 
 func (r report) diagnosis() string {
 	if r.DNSError != "" {
-		return "DNS — системный резолвер не вернул IPv4."
+		return "Вероятная причина — сбой DNS. Системный резолвер не вернул IPv4."
 	}
-	var target, control *trial
-	for i := range r.Series.Trials {
-		t := &r.Series.Trials[i]
-		if r.Control != "" && t.SNI == r.Control {
-			control = t
+	if len(r.Runs) == 0 || r.Runs[0].Err != nil {
+		return "Вывод — измерение не состоялось."
+	}
+	tcp := r.Runs[0]
+	if !tcp.connected() {
+		return failureCause(tcp.targetTrial(""))
+	}
+	var worked, silent, best *seriesResult
+	tlsAvailable := false
+	for i := 1; i < len(r.Runs); i++ {
+		s := &r.Runs[i]
+		t := s.targetTrial(r.Control)
+		if s.Err != nil || t == nil {
 			continue
 		}
 		if t.Observation.Stage == "complete" {
-			return "TLS — рукопожатие и проверка сертификата прошли."
+			tlsAvailable = true
+			if len(s.Trials) == 2 && s.Trials[0].Observation.Stage == "complete" && s.Trials[1].Observation.Stage == "complete" {
+				worked = s
+			}
+			continue
 		}
-		if target == nil || t.phase() > target.phase() {
-			target = t
+		if best == nil || t.phase() > best.targetTrial(r.Control).phase() {
+			best = s
+		}
+		if s.silentHello(t) {
+			silent = s
 		}
 	}
-	if target == nil && control != nil {
-		return "Измерение — серия завершилась на контроле, попытка ресурса не началась."
+	if worked != nil && silent != nil {
+		return fmt.Sprintf("Вероятная причина — чувствительность к моменту отправки ClientHello. В этой серии «%s» прошёл, «%s» остался без ответа.", worked.Profile.label, silent.Profile.label)
 	}
-	if r.CaptureError != nil || target == nil {
-		return "Измерение — прогона ресурса с пригодным захватом нет."
+	if tlsAvailable {
+		return "Вывод — TLS доступен на выбранном IPv4."
 	}
-	if target.WireNote != "" {
-		return "Измерение — пакеты попытки не удалось однозначно сопоставить."
-	}
-	timedOut := target.Observation.Error == context.DeadlineExceeded.Error()
-	retried := target.Wire.DataRepeat && strings.Contains(r.Series.StopReason, "outgoing data or FIN retransmission")
-	if control != nil && control.WireNote == "" && control.Observation.Stage == "complete" &&
-		control.Wire.HelloSNI == r.Control && target.Wire.HelloSNI == r.Host &&
-		target.Wire.HelloBytes > 0 && control.Wire.HelloBytes > 0 && (timedOut || retried) &&
-		target.Wire.SYNACK && !target.Wire.ServerData && !target.Wire.Reset && target.Observation.Stage == "tls" {
-		if target.Wire.HelloBytes == control.Wire.HelloBytes {
-			return "ClientHello — вероятна фильтрация по SNI. На том же IP контроль завершил TLS, ресурс остался без ответа."
+	for i := 1; i < len(r.Runs); i++ {
+		s := r.Runs[i]
+		t := s.targetTrial(r.Control)
+		if r.Control == "" || !s.silentHello(t) || t.Wire.HelloSNI != r.Host {
+			continue
 		}
-		return "ClientHello — у ресурса нет ответа, контроль на том же IP завершил TLS. Отличались SNI и размер ClientHello."
+		for _, c := range s.Trials {
+			if c.SNI != r.Control || c.WireNote != "" || c.Observation.Stage != "complete" || c.Wire.HelloSNI != r.Control {
+				continue
+			}
+			if c.Wire.HelloBytes == t.Wire.HelloBytes {
+				return "Вероятная причина — фильтрация или отказ по SNI. На том же IP контроль завершил TLS, ресурс остался без ответа."
+			}
+			return "Вероятная причина — реакция на параметры ClientHello. На том же IP контроль прошёл, отличались SNI и размер ClientHello."
+		}
 	}
-	return target.outcome()
+	if best != nil {
+		return failureCause(best.targetTrial(r.Control))
+	}
+	return "Вывод — TCP доступен, результат TLS для ресурса отсутствует."
+}
+
+func failureCause(t *trial) string {
+	if t == nil {
+		return "Вывод — попытка ресурса не состоялась."
+	}
+	w := t.Wire
+	switch {
+	case strings.Contains(t.Observation.Error, "network is unreachable") || strings.Contains(t.Observation.Error, "no route to host"):
+		return "Вероятная причина — сбой маршрута до выбранного IP."
+	case t.Observation.Error == context.Canceled.Error() && !w.DataRepeat && !w.Reset:
+		return "Вывод — проверка остановлена до завершения попытки."
+	case t.WireNote != "":
+		return "Вывод — пакеты попытки не удалось однозначно сопоставить."
+	case !w.SYNACK && w.Reset:
+		return "Вероятная причина — отказ на порту TCP/443. На SYN пришёл RST."
+	case !w.SYNACK:
+		return "Вероятная причина — потеря или фильтрация TCP/443 до TLS. SYN-ACK не получен."
+	case strings.Contains(t.Observation.Error, "x509:"):
+		return "Вероятная причина — сертификат не прошёл проверку."
+	case w.Alert != nil || strings.Contains(t.Observation.Error, "remote error: tls:"):
+		return "Вероятная причина — отклонение TLS-рукопожатия. Получен TLS Alert."
+	case w.Reset:
+		return "Вероятная причина — принудительный сброс TCP после установления соединения."
+	case w.ServerHello:
+		return "Вывод — сервер начал TLS-рукопожатие, сбой произошёл после ServerHello."
+	case w.HelloBytes > 0 && !w.ServerData:
+		return "Вероятная причина — отбрасывание ClientHello или ответных пакетов TLS. TCP до этого установился."
+	default:
+		return "Вывод — TCP установился, сбой произошёл на начальном этапе TLS."
+	}
 }
 
 func (t trial) phase() int {
@@ -149,32 +255,50 @@ func (r report) save(dir string) error {
 			fmt.Fprintf(&b, "С контролем `%s` нет общего IPv4.\n", r.RequestedControl)
 		}
 	}
-	var attempts, successful int
-	for _, t := range r.Series.Trials {
-		if t.SNI != r.Control {
-			attempts++
-			if t.Observation.Stage == "complete" {
-				successful++
+	if r.SetupError != nil {
+		fmt.Fprintf(&b, "Ошибка запуска — %s.\n", inline(r.SetupError.Error()))
+	}
+	if r.DNSError == "" && len(r.Runs) > 0 {
+		b.WriteByte('\n')
+		for i, profile := range profiles {
+			outcome := "пропущен"
+			if i < len(r.Runs) {
+				run := r.Runs[i]
+				outcome = run.outcome(r.Control)
+				if run.StopReason != "" && run.Err == nil {
+					outcome += " (" + shortStop(run.StopReason) + ")"
+				}
 			}
+			fmt.Fprintf(&b, "- %s — %s.\n", profile.label, outcome)
 		}
 	}
-	if successful > 0 && successful < attempts {
-		fmt.Fprintf(&b, "TLS прошёл в %d из %d попыток.\n", successful, attempts)
-	}
-	if r.Series.StopReason != "" {
-		fmt.Fprintf(&b, "Остановка прогона — %s.\n", inline(r.Series.StopReason))
-	}
-	if r.CaptureError != nil {
-		fmt.Fprintf(&b, "Ошибка измерения — %s.\n", inline(r.CaptureError.Error()))
-	}
 	fmt.Fprintf(&b, "\n%s · %s", r.Started.Format(time.RFC3339), inline(r.Operator))
-	if r.ExperimentID != "" {
-		fmt.Fprintf(&b, " · %s · %d/%d пакетов, %d/%d Б · лимит %d пак/с, %d с",
-			r.ExperimentID, r.Series.Packets, r.Budget.MaxPackets, r.Series.Bytes, r.Budget.MaxBytes,
-			r.Budget.MaxRatePPS, r.Budget.MaxDurationS)
+	if len(r.Runs) > 0 {
+		fmt.Fprintf(&b, " · %s · пакеты/байты по режимам", r.BatchID)
+		for _, run := range r.Runs {
+			fmt.Fprintf(&b, " %d/%d", run.Packets, run.Bytes)
+		}
+		budget := r.Runs[0].Budget
+		fmt.Fprintf(&b, " · лимит на режим %d пакетов, %d Б, %d пак/с, %d с",
+			budget.MaxPackets, budget.MaxBytes, budget.MaxRatePPS, budget.MaxDurationS)
 	}
 	b.WriteByte('\n')
 	return os.WriteFile(filepath.Join(dir, r.Host+".md"), []byte(b.String()), 0o600)
+}
+
+func shortStop(reason string) string {
+	switch {
+	case strings.Contains(reason, "SYN retransmission limit"):
+		return "остановка после повторного SYN"
+	case strings.Contains(reason, "outgoing data or FIN retransmission"):
+		return "остановка после повтора TCP-данных или FIN"
+	case strings.Contains(reason, "observed limit reached"):
+		return "достигнут лимит прогона"
+	case strings.Contains(reason, "context canceled"):
+		return "прервано"
+	default:
+		return inline(reason)
+	}
 }
 
 func inline(s string) string {

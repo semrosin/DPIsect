@@ -25,7 +25,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const rule = "Record the last observed DNS/TCP/TLS stage. A same-IP control completing TLS while the target times out or retransmits " +
+const rule = "Record the last observed DNS/TCP/TLS stage. Compare immediate and delayed ClientHello on the same IPv4 after TCP connects. " +
+	"A same-IP control completing TLS while the target times out or retransmits " +
 	"its equal-size ClientHello without a TLS response is a likely SNI-dependent difference; its source remains undetermined. " +
 	"TLS alerts, certificate failures and TCP failures are reported at their observed stage. This batch does not assign a formal research verdict."
 
@@ -68,9 +69,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	if !*confirm {
 		for _, target := range targets {
-			profile := "two ordinary attempts with the resource name"
+			profile := "TCP, TLS immediately, TLS after 500 ms"
 			if target.Control != "" {
-				profile = "ordinary SNI comparison with " + target.Control + " if DNS returns a common IPv4"
+				profile += "; SNI control " + target.Control + " on a common IPv4"
 			}
 			fmt.Printf("%s:443 — %s\n", target.Host, profile)
 		}
@@ -180,8 +181,8 @@ func lookupIPv4(ctx context.Context, host string) ([]netip.Addr, error) {
 func checkResource(ctx context.Context, root, bin, iface, operator string, target resource) (result error) {
 	diagnostic := report{Host: target.Host, Operator: operator, Started: time.Now().UTC()}
 	defer func() {
-		if result != nil && diagnostic.CaptureError == nil && diagnostic.DNSError == "" && len(diagnostic.Series.Trials) == 0 {
-			diagnostic.CaptureError = result
+		if result != nil && diagnostic.DNSError == "" && len(diagnostic.Runs) == 0 {
+			diagnostic.SetupError = result
 		}
 		result = errors.Join(result, diagnostic.save(root))
 	}()
@@ -212,16 +213,50 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 		return err
 	}
 
+	if first != target.Host {
+		diagnostic.Control = first
+	}
+	diagnostic.BatchID = filepath.Base(root)
+	for _, profile := range profiles {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(result, err)
+		}
+		run := probeProfile(ctx, bin, iface, diagnostic, profile, first, second)
+		diagnostic.Runs = append(diagnostic.Runs, run)
+		if run.Err != nil {
+			return errors.Join(result, run.Err)
+		}
+		if profile.tcpOnly && !run.connected() {
+			break
+		}
+	}
+	return result
+}
+
+type probeProfileSpec struct {
+	name, label string
+	tcpOnly     bool
+	delayMS     int
+}
+
+var profiles = [...]probeProfileSpec{
+	{name: "tcp", label: "Только TCP", tcpOnly: true},
+	{name: "tls", label: "TLS сразу"},
+	{name: "tls-delay", label: "TLS через 500 мс", delayMS: 500},
+}
+
+func probeProfile(ctx context.Context, bin, iface string, r report, profile probeProfileSpec, first, second string) (run seriesResult) {
+	run.Profile = profile
 	dir, err := os.MkdirTemp("", "dpisect-batch-")
 	if err != nil {
-		return err
+		run.Err = err
+		return run
 	}
-	defer func() { result = errors.Join(result, os.RemoveAll(dir)) }()
+	defer func() { run.Err = errors.Join(run.Err, os.RemoveAll(dir)) }()
 
 	question := "A02"
-	if first != target.Host {
+	if !profile.tcpOnly && r.Control != "" {
 		question = "B02"
-		diagnostic.Control = first
 	}
 	pcap := filepath.Join(dir, "client.pcap")
 	limit := 1
@@ -230,60 +265,62 @@ func checkResource(ctx context.Context, root, bin, iface, operator string, targe
 	budget.MaxSYNRetransmissions = &limit
 	budget.StopConditions = []string{"first repeated SYN, data or FIN", "budget threshold", "capture error or drops", "SIGINT"}
 	config := runner.Config{
-		ExperimentID: strings.ToLower(question) + "-batch-" + strings.ReplaceAll(target.Host, ".", "-") +
-			"-" + strings.TrimPrefix(filepath.Base(root), "batch-") + "-" + diagnostic.Started.Format("2006-01"),
-		QuestionID: question, Mode: "valid-session", SNI: first, PairedSNI: second, PairedTimeoutMS: 4000,
-		Endpoint: runner.Endpoint{Role: runner.RoleTarget, IP: ip.String(), Port: 443},
+		ExperimentID: strings.ToLower(question) + "-" + profile.name + "-" + strings.ReplaceAll(r.Host, ".", "-") +
+			"-" + r.BatchID + "-" + r.Started.Format("2006-01"),
+		QuestionID: question, Mode: "valid-session",
+		Endpoint: runner.Endpoint{Role: runner.RoleTarget, IP: r.IP.String(), Port: 443},
 		Budget:   budget, Schedule: runner.Schedule{Repetitions: 1, InterTrialGapMS: 3000, StateReset: "none"},
 		Capture: runner.CapturePaths{Client: pcap}, RunnerLog: filepath.Join(dir, "runner.log"),
 		ClassificationRule: rule,
 	}
-	configPath := filepath.Join(dir, "config.yaml")
+	observations := "sni-observations.json"
+	if profile.tcpOnly {
+		config.TCPOnly, config.TCPTimeoutMS = true, 4000
+		observations = "tcp-observations.json"
+	} else {
+		config.SNI, config.PairedSNI = first, second
+		config.PairedClientHelloDelayMS = profile.delayMS
+		config.PairedTimeoutMS = 4000 + profile.delayMS
+	}
 	data, err := yaml.Marshal(config)
 	if err != nil {
-		return err
+		run.Err = err
+		return run
 	}
+	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, data, 0o600); err != nil {
-		return err
+		run.Err = err
+		return run
 	}
-	diagnostic.ExperimentID, diagnostic.Budget = config.ExperimentID, budget
-	cmd := exec.CommandContext(ctx, bin, "-config", configPath, "-capture-iface", iface, "-operator", operator)
+	run.Budget = budget
+	cmd := exec.CommandContext(ctx, bin, "-config", configPath, "-capture-iface", iface, "-operator", r.Operator)
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
 	cmd.WaitDelay = 3 * time.Second
 	_, probeErr := cmd.Output()
 
-	obsErr := readJSON(filepath.Join(dir, "sni-observations.json"), &diagnostic.Series)
-	if obsErr == nil {
-		diagnostic.CaptureError = readCapture(pcap, ip, diagnostic.Series.Trials)
-		if diagnostic.Series.CaptureDrops > 0 {
-			diagnostic.CaptureError = fmt.Errorf("capture dropped %d packets", diagnostic.Series.CaptureDrops)
+	if err := readJSON(filepath.Join(dir, observations), &run); err != nil {
+		run.Err = errors.New("probe observations unavailable")
+		if probeErr != nil {
+			run.Err = probeErr
 		}
-		if probeErr != nil && diagnostic.Series.StopReason == "" {
-			diagnostic.Series.StopReason = probeErr.Error()
-			diagnostic.CaptureError = errors.Join(diagnostic.CaptureError, probeErr)
-		}
-	} else {
-		diagnostic.CaptureError = errors.New("probe observations unavailable")
 		var exitErr *exec.ExitError
 		if errors.As(probeErr, &exitErr) {
-			_, detail, ok := strings.Cut(string(exitErr.Stderr), "\ndpi-prober: ")
+			_, detail, ok := strings.Cut("\n"+string(exitErr.Stderr), "\ndpi-prober: ")
 			if ok {
 				detail, _, _ = strings.Cut(detail, "\n")
-				probeErr = errors.New(strings.ReplaceAll(detail, dir+string(os.PathSeparator), ""))
+				run.Err = errors.New(strings.ReplaceAll(detail, dir+string(os.PathSeparator), ""))
 			}
 		}
-		if probeErr != nil {
-			diagnostic.CaptureError = probeErr
-		}
+		return run
 	}
-	if diagnostic.CaptureError != nil {
-		for i := range diagnostic.Series.Trials {
-			diagnostic.Series.Trials[i].Wire = evidence{}
-			diagnostic.Series.Trials[i].WireNote = "Захват недоступен для вывода по пакетам."
-		}
+	run.Err = readCapture(pcap, r.IP, run.Trials)
+	if run.CaptureDrops > 0 {
+		run.Err = fmt.Errorf("capture dropped %d packets", run.CaptureDrops)
 	}
-	// A normal policy stop can still leave enough packet evidence for a report.
-	return diagnostic.CaptureError
+	if probeErr != nil && run.StopReason == "" {
+		run.Err = errors.Join(run.Err, probeErr)
+	}
+	return run
 }
 
 func readJSON(path string, output any) error {

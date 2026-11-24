@@ -104,28 +104,47 @@ func TestB02_DiagnosesRequireComparableWireEvidence(t *testing.T) {
 		edit func(*trial)
 		want string
 	}{
-		{"same length", func(*trial) {}, "вероятна фильтрация по SNI"},
-		{"different length", func(t *trial) { t.Wire.HelloBytes++ }, "Отличались SNI и размер ClientHello"},
+		{"same length", func(*trial) {}, "фильтрация или отказ по SNI"},
+		{"different length", func(t *trial) { t.Wire.HelloBytes++ }, "отличались SNI и размер ClientHello"},
 		{"TCP timeout", func(t *trial) { t.Wire = evidence{SYNs: 2} }, "SYN-ACK не получен"},
-		{"unparsed response", func(t *trial) { t.Wire.ServerData = true }, "ответные TCP-данные есть"},
-		{"TCP reset", func(t *trial) { t.Wire.Reset = true }, "получен RST"},
+		{"unparsed response", func(t *trial) { t.Wire.ServerData = true }, "на начальном этапе TLS"},
+		{"TCP reset", func(t *trial) { t.Wire.Reset = true }, "принудительный сброс TCP"},
 		{"TLS alert", func(t *trial) { alert := byte(112); t.Wire.ServerData, t.Wire.Alert = true, &alert }, "Alert"},
 		{"certificate", func(t *trial) {
 			t.Wire.ServerData, t.Observation.Error = true, "tls: failed to verify certificate: x509: expired"
-		}, "ошибка проверки сертификата"},
+		}, "сертификат не прошёл проверку"},
 		{"missing SYN", func(t *trial) { t.WireNote = "no SYN" }, "пакеты попытки не удалось"},
-		{"canceled", func(t *trial) { t.Observation.Error = "context canceled" }, "ответных данных TLS в окне захвата нет"},
-		{"success", func(t *trial) { t.Observation.Stage = "complete" }, "проверка сертификата прошли"},
+		{"canceled", func(t *trial) { t.Observation.Error = "context canceled" }, "проверка остановлена"},
+		{"success", func(t *trial) { t.Observation.Stage = "complete" }, "TLS доступен"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			attempt := target
 			tc.edit(&attempt)
 			r := report{Host: target.SNI, Control: control.SNI}
-			r.Series.Trials = []trial{control, attempt}
+			r.Runs = []seriesResult{
+				{Profile: profiles[0], Trials: []trial{{Observation: sender.ConnectionObservation{Stage: "complete"}}}},
+				{Profile: profiles[1], Trials: []trial{control, attempt}},
+			}
 			if got := r.diagnosis(); !strings.Contains(got, tc.want) {
 				t.Errorf("diagnosis = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestA02_DiagnosesDifferentTLSSettings(t *testing.T) {
+	connected := trial{Observation: sender.ConnectionObservation{Stage: "complete"}}
+	silent := trial{
+		Observation: sender.ConnectionObservation{Stage: "tls", Error: context.DeadlineExceeded.Error()},
+		Wire:        evidence{SYNACK: true, ClientData: true, HelloBytes: 100},
+	}
+	r := report{Runs: []seriesResult{
+		{Profile: profiles[0], Trials: []trial{connected}},
+		{Profile: profiles[1], Trials: []trial{silent}},
+		{Profile: profiles[2], Trials: []trial{connected, connected}},
+	}}
+	if got := r.diagnosis(); !strings.Contains(got, "чувствительность к моменту отправки ClientHello") {
+		t.Fatalf("diagnosis = %q", got)
 	}
 }
