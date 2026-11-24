@@ -62,6 +62,9 @@ type Config struct {
 	ClassificationRule string    `yaml:"classification_rule"`
 	Preflight          Preflight `yaml:"preflight"`
 	Lab                Lab       `yaml:"lab"`
+	// Raw controls the raw-experiment sequence (D01–D04). It is
+	// required for mode raw-experiment and rejected otherwise.
+	Raw *RawConfig `yaml:"raw,omitempty"`
 }
 
 // PairedSplit specifies offsets for alternating control and treatment trials.
@@ -83,6 +86,41 @@ type PairedHello struct {
 	Control   HelloVariant `yaml:"control"`
 	Treatment HelloVariant `yaml:"treatment"`
 }
+
+// RawConfig describes the single fake probe and how the real
+// ClientHello follows it (docs/ARCHITECTURE.md §4, D01–D04).
+type RawConfig struct {
+	// Sequence is same_tcp (fake and real ClientHello share one TCP
+	// connection) or fresh_tcp (fake uses a throwaway connection).
+	Sequence string `yaml:"sequence"`
+	// TimeoutMS bounds connection, flow tracking and probe settle.
+	TimeoutMS int     `yaml:"timeout_ms"`
+	Fake      RawFake `yaml:"fake"`
+}
+
+// RawFake is the deliberately malformed packet sent before the real
+// ClientHello. Only one field may differ from the correct value in a
+// given experiment arm; the runner enforces that independently.
+type RawFake struct {
+	Enabled     bool   `yaml:"enabled"`
+	TTL         uint8  `yaml:"ttl"`
+	Seq         string `yaml:"seq"`      // correct | out_of_order | old
+	Ack         string `yaml:"ack"`      // correct | wrong
+	Checksum    string `yaml:"checksum"` // correct | corrupt
+	SendAfterMS int64  `yaml:"send_after_ms"`
+}
+
+const (
+	RawSequenceSameTCP  = "same_tcp"
+	RawSequenceFreshTCP = "fresh_tcp"
+
+	RawFieldCorrect     = "correct"
+	RawFieldOutOfOrder  = "out_of_order"
+	RawFieldOld         = "old"
+	RawFieldWrong       = "wrong"
+	RawFieldCorrupt     = "corrupt"
+	defaultRawTimeoutMS = 5000
+)
 
 // Endpoint is the single destination of the run.
 type Endpoint struct {
@@ -198,6 +236,28 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Budget.MaxDurationS == 0 {
 		c.Budget.MaxDurationS = d.MaxDurationS
+	}
+	if c.Raw != nil {
+		if c.Raw.Sequence == "" {
+			c.Raw.Sequence = RawSequenceSameTCP
+		}
+		if c.Raw.TimeoutMS == 0 {
+			c.Raw.TimeoutMS = defaultRawTimeoutMS
+		}
+		if c.Raw.Fake.Enabled {
+			if c.Raw.Fake.TTL == 0 {
+				c.Raw.Fake.TTL = 64
+			}
+			if c.Raw.Fake.Seq == "" {
+				c.Raw.Fake.Seq = RawFieldCorrect
+			}
+			if c.Raw.Fake.Ack == "" {
+				c.Raw.Fake.Ack = RawFieldCorrect
+			}
+			if c.Raw.Fake.Checksum == "" {
+				c.Raw.Fake.Checksum = RawFieldCorrect
+			}
+		}
 	}
 }
 
@@ -343,6 +403,9 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New(
 			"raw-experiment against target is forbidden (docs/SAFETY.md §1)"))
 	}
+	if modeErr == nil {
+		errs = append(errs, c.validateRaw(mode)...)
+	}
 	if net.ParseIP(c.Endpoint.IP) == nil {
 		errs = append(errs, fmt.Errorf("endpoint.ip %q is not a valid IP", c.Endpoint.IP))
 	}
@@ -420,6 +483,74 @@ func (c Config) Validate() error {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// validateRaw checks the D01–D04 sequence contract and keeps raw
+// blocks out of the valid-session path.
+func (c Config) validateRaw(mode generator.Mode) []error {
+	if mode == generator.ValidSession {
+		if c.Raw != nil {
+			return []error{errors.New("raw block is only valid with mode raw-experiment")}
+		}
+		return nil
+	}
+	if c.Raw == nil {
+		return []error{errors.New(
+			"raw block is required for mode raw-experiment (D01–D04)")}
+	}
+	if c.SNI == "" {
+		return []error{errors.New("sni is required for a raw-experiment ClientHello")}
+	}
+	if ip := net.ParseIP(c.Endpoint.IP); ip == nil || ip.To4() == nil {
+		return []error{fmt.Errorf(
+			"raw-experiment requires an IPv4 endpoint, got %q", c.Endpoint.IP)}
+	}
+
+	var errs []error
+	switch c.Raw.Sequence {
+	case RawSequenceSameTCP, RawSequenceFreshTCP:
+	default:
+		errs = append(errs, fmt.Errorf(
+			"raw.sequence %q must be same_tcp or fresh_tcp", c.Raw.Sequence))
+	}
+	if c.Raw.TimeoutMS < 1 || c.Raw.TimeoutMS > c.Budget.MaxDurationS*1000 {
+		errs = append(errs, fmt.Errorf(
+			"raw.timeout_ms %d out of range 1-%d",
+			c.Raw.TimeoutMS, c.Budget.MaxDurationS*1000))
+	}
+	if c.Raw.Sequence == RawSequenceFreshTCP && !c.Raw.Fake.Enabled {
+		errs = append(errs, errors.New(
+			"raw.sequence fresh_tcp requires raw.fake.enabled"))
+	}
+	if !c.Raw.Fake.Enabled {
+		return errs
+	}
+	if c.Raw.Fake.TTL == 0 {
+		errs = append(errs, errors.New("raw.fake.ttl must be 1-255"))
+	}
+	switch c.Raw.Fake.Seq {
+	case RawFieldCorrect, RawFieldOutOfOrder, RawFieldOld:
+	default:
+		errs = append(errs, fmt.Errorf(
+			"raw.fake.seq %q must be correct, out_of_order or old", c.Raw.Fake.Seq))
+	}
+	switch c.Raw.Fake.Ack {
+	case RawFieldCorrect, RawFieldWrong:
+	default:
+		errs = append(errs, fmt.Errorf(
+			"raw.fake.ack %q must be correct or wrong", c.Raw.Fake.Ack))
+	}
+	switch c.Raw.Fake.Checksum {
+	case RawFieldCorrect, RawFieldCorrupt:
+	default:
+		errs = append(errs, fmt.Errorf(
+			"raw.fake.checksum %q must be correct or corrupt", c.Raw.Fake.Checksum))
+	}
+	if c.Raw.Fake.SendAfterMS < 0 {
+		errs = append(errs, fmt.Errorf(
+			"raw.fake.send_after_ms %d must not be negative", c.Raw.Fake.SendAfterMS))
+	}
+	return errs
 }
 
 // GeneratorMode returns the validated experiment mode.
