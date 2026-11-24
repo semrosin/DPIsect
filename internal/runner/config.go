@@ -66,8 +66,9 @@ type Config struct {
 
 // PairedSplit specifies offsets for alternating control and treatment trials.
 type PairedSplit struct {
-	Control   int `yaml:"control"`
-	Treatment int `yaml:"treatment"`
+	Control   int    `yaml:"control"`
+	Treatment int    `yaml:"treatment"`
+	First     string `yaml:"first,omitempty"`
 }
 
 // HelloVariant defines exact ClientHello coordinates and ignored bytes.
@@ -274,8 +275,14 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New("tcp_timeout_ms requires tcp_only"))
 	}
 	if c.PairedSplit != nil {
-		if c.QuestionID != "C01" || c.PairedSNI == "" || c.TCPOnly || c.PairedSplit.Control < 0 || c.PairedSplit.Treatment < 0 || c.PairedSplit.Control == c.PairedSplit.Treatment {
-			errs = append(errs, errors.New("paired_split requires C01, paired_sni, and distinct nonnegative offsets"))
+		if c.PairedSplit.First != "" && c.PairedSplit.First != "control" && c.PairedSplit.First != "treatment" {
+			errs = append(errs, errors.New("paired_split.first must be control or treatment"))
+		}
+		if c.PairedSplit.First != "" && (c.PairedSplit.Control != 0 || c.PairedSplit.Treatment <= 0) {
+			errs = append(errs, errors.New("explicit split order requires unsplit control and positive treatment offset"))
+		}
+		if c.PairedSNI == "" || c.TCPOnly || c.PairedSplit.Control < 0 || c.PairedSplit.Treatment < 0 || c.PairedSplit.Control == c.PairedSplit.Treatment {
+			errs = append(errs, errors.New("paired_split requires paired_sni and distinct nonnegative offsets"))
 		}
 	}
 	if c.PairedHello != nil {

@@ -74,7 +74,11 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 	if err := cfg.Validate(); err != nil {
 		return sniWirePlan{}, nil, fmt.Errorf("invalid config: %w", err)
 	}
-	names, err := pairedSNIScheduleFor(cfg.SNI, cfg.PairedSNI, cfg.Schedule.Repetitions, cfg.PairedHello != nil || cfg.PairedSplit != nil)
+	control, treatment := cfg.SNI, cfg.PairedSNI
+	if cfg.PairedSplit != nil && cfg.PairedSplit.First == "treatment" {
+		control, treatment = treatment, control
+	}
+	names, err := pairedSNIScheduleFor(control, treatment, cfg.Schedule.Repetitions, cfg.PairedHello != nil || cfg.PairedSplit != nil)
 	if err != nil {
 		return sniWirePlan{}, nil, err
 	}
@@ -103,7 +107,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		if cfg.PairedHello == nil {
 			session, err = sender.PrepareTLS(ctx, name, nil)
 		} else {
-			variant = pairedVariant(i)
+			variant = splitVariant(i, cfg.PairedSplit)
 			value := cfg.PairedHello.Control
 			if variant == "treatment" {
 				value = cfg.PairedHello.Treatment
@@ -118,7 +122,7 @@ func prepareSNIWirePlan(ctx context.Context, cfg Config, configPath string) (sni
 		payload := session.ClientHello()
 		var splits []int
 		if cfg.PairedSplit != nil {
-			variant = pairedVariant(i)
+			variant = splitVariant(i, cfg.PairedSplit)
 			offset := cfg.PairedSplit.Control
 			if variant == "treatment" {
 				offset = cfg.PairedSplit.Treatment

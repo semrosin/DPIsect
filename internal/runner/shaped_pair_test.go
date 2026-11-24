@@ -180,3 +180,30 @@ paired_split: {control: 0, treatment: 32}
 		}
 	}
 }
+
+func TestC01SplitExplicitTreatmentFirst(t *testing.T) {
+	dir := t.TempDir()
+	config := runConfigYAML("127.0.0.1", 443, 1, 100, dir) + `paired_sni: treatment.example
+paired_split: {control: 0, treatment: 32, first: treatment}
+`
+	configPath := writeRunConfig(t, dir, config)
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, sessions, err := prepareSNIWirePlan(context.Background(), cfg, configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		for _, session := range sessions {
+			session.Close()
+		}
+	}()
+	if plan.Trials[0].SNI != "treatment.example" || plan.Trials[0].Variant != "treatment" ||
+		len(plan.Trials[0].Packet.SplitOffsets) != 1 || plan.Trials[0].Packet.SplitOffsets[0] != 32 ||
+		plan.Trials[1].SNI != "control.example" || plan.Trials[1].Variant != "control" ||
+		len(plan.Trials[1].Packet.SplitOffsets) != 0 {
+		t.Fatalf("unexpected trial order: %+v", plan.Trials)
+	}
+}
