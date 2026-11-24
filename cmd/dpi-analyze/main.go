@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/semrosin/DPIsect/internal/analyzer"
@@ -27,9 +28,10 @@ var (
 // rule next to the measurements, so the operator can paste it into
 // the report (docs/EXPERIMENTS.md §7 — the verdict stays theirs).
 type analysisResult struct {
-	ClassificationRule string                    `json:"classification_rule"`
-	ClientPCAP         string                    `json:"client_pcap"`
-	Observation        analyzer.CauseObservation `json:"observation"`
+	ClassificationRule string                        `json:"classification_rule"`
+	ClientPCAP         string                        `json:"client_pcap"`
+	Observation        analyzer.CauseObservation     `json:"observation"`
+	RawValidation      *analyzer.RawActualValidation `json:"raw_actual_validation,omitempty"`
 }
 
 func main() {
@@ -43,6 +45,8 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("dpi-analyze", flag.ContinueOnError)
 	configPath := fs.String("config", "",
 		"path to the run's config.yaml (classification_rule and observation paths)")
+	raw := fs.Bool("raw", false,
+		"also validate raw-observations.json against the client PCAP (D01–D04)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -78,11 +82,21 @@ func run(args []string) error {
 		return fmt.Errorf("classify %s: %w", cfg.Capture.Client, err)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(analysisResult{
+	result := analysisResult{
 		ClassificationRule: cfg.ClassificationRule,
 		ClientPCAP:         cfg.Capture.Client,
 		Observation:        obs,
-	})
+	}
+	if *raw {
+		obsPath := filepath.Join(filepath.Dir(*configPath), "raw-observations.json")
+		rv, err := analyzer.ValidateRawPCAP(ctx, cfg.Capture.Client, cfg.Capture.Server, obsPath)
+		if err != nil {
+			return fmt.Errorf("validate raw actual wire: %w", err)
+		}
+		result.RawValidation = &rv
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
