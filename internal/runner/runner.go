@@ -88,13 +88,11 @@ func Run(ctx context.Context, cfg Config, opts Options) error {
 		return errors.New(
 			"raw-experiment requires explicit confirmation: pass -allow-raw (docs/SAFETY.md §1)")
 	}
-	if mode == generator.RawExperiment {
-		// TODO(semrosin): raw-socket sender for crafted packets;
-		// the plan builder and the -allow-raw gate already exist.
-		return fmt.Errorf("raw-experiment sending: %w", sender.ErrNotImplemented)
-	}
 	if opts.ConfigPath == "" {
 		return errors.New("config path is required to place plan.yaml and run.json")
+	}
+	if mode == generator.RawExperiment {
+		return runRaw(ctx, cfg, opts)
 	}
 	return run(ctx, cfg, opts, defaultDependencies())
 }
