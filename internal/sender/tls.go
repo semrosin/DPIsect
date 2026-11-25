@@ -10,10 +10,11 @@ import (
 // ConnectionObservation reports the furthest stage reached by a TCP or TLS probe.
 // For a TCP-only probe, complete means TCP connected; TLS was not attempted.
 type ConnectionObservation struct {
-	Stage       string `json:"stage"`
-	Error       string `json:"error,omitempty"`
-	Version     uint16 `json:"tls_version,omitempty"`
-	CipherSuite uint16 `json:"cipher_suite,omitempty"`
+	Stage              string `json:"stage"`
+	Error              string `json:"error,omitempty"`
+	Version            uint16 `json:"tls_version,omitempty"`
+	CipherSuite        uint16 `json:"cipher_suite,omitempty"`
+	NegotiatedProtocol string `json:"alpn,omitempty"`
 }
 
 // TLSObservation preserves the existing TLS sender interface.
@@ -22,16 +23,21 @@ type TLSObservation = ConnectionObservation
 // TLSProbe connects to addr and verifies the server certificate against sni.
 // A nil roots uses the system trust store. The caller controls the deadline.
 func TLSProbe(ctx context.Context, addr, sni string, roots *x509.CertPool) TLSObservation {
+	return TLSProbeWithConfig(ctx, addr, &tls.Config{ServerName: sni, RootCAs: roots})
+}
+
+// TLSProbeWithConfig connects to addr with the supplied TLS client settings.
+func TLSProbeWithConfig(ctx context.Context, addr string, config *tls.Config) TLSObservation {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return TLSObservation{Stage: "tcp", Error: err.Error()}
 	}
 	defer func() { _ = conn.Close() }()
 
-	tlsConn := tls.Client(conn, &tls.Config{ServerName: sni, RootCAs: roots})
+	tlsConn := tls.Client(conn, config)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		return TLSObservation{Stage: "tls", Error: err.Error()}
 	}
 	state := tlsConn.ConnectionState()
-	return TLSObservation{Stage: "complete", Version: state.Version, CipherSuite: state.CipherSuite}
+	return TLSObservation{Stage: "complete", Version: state.Version, CipherSuite: state.CipherSuite, NegotiatedProtocol: state.NegotiatedProtocol}
 }
